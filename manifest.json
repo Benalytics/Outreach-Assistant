@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Outreach Assistant",
+  "version": "0.6.0",
+  "description": "Find, verify and save leads to Google Sheets, then write and track short cold emails.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsp7qe7GOOGwfywWM2z/SoxUuRRYLiAsfNxOLM0KoWgKsDXLMXdX83ZLdgZGR97aL7LN1+aDbLgJqIXg6EcX2FIT3Q3KPG/4HrxBAAlCBAF4/7q+w5gAcpOxSrRyr9z78sn80t7bnPQrxfbkvGqq/BhWL+t+jI/yxsRrU52z5cW4/jl/E4Qe01CNwYLCRtAlrg0Gz70jZOiNa9QmM5JAMVvSC2m00wVOEfTfDw+fHnDJVX6mk2qIT1oGkPuabAyu5DgkpdxZRn+6YDE2PYiivxX1Fy9PkfXZeE2PIZXflDhafu/E2LX1YVf4d+GWBfg7ykqzVwRYT1iMIwOANTB+aFQIDAQAB",
+  "permissions": [
+    "identity",
+    "storage",
+    "sidePanel",
+    "scripting",
+    "activeTab",
+    "tabs",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "action": {
+    "default_title": "Open Outreach Assistant",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "oauth2": {
+    "client_id": "REPLACE_WITH_YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/gmail.readonly"
+    ]
+  }
+}

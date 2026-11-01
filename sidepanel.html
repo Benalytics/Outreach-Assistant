@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Outreach Assistant</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header>
+    <h1>Outreach Assistant</h1>
+    <nav>
+      <button class="tab active" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="leads">Leads</button>
+      <button class="tab" data-tab="compose">Compose</button>
+      <button class="tab" data-tab="analytics">Analytics</button>
+    </nav>
+  </header>
+
+  <div id="toast" hidden></div>
+
+  <main>
+    <section id="tab-setup" class="panel active">
+      <div class="card">
+        <h2>1. Google account</h2>
+        <p id="auth-status" class="muted">Checking…</p>
+        <button id="btn-signin" class="primary">Sign in with Google</button>
+        <button id="btn-signout" class="secondary" hidden>Sign out</button>
+      </div>
+
+      <div class="card">
+        <h2>2. Apollo API key</h2>
+        <p id="apollo-status" class="muted">Used to find people on Apollo. It stays in this browser only.</p>
+        <input id="apollo-key" type="password" placeholder="Paste your Apollo API key">
+        <button id="btn-apollo-save" class="secondary">Save key</button>
+      </div>
+
+      <div class="card">
+        <h2>3. Hunter API key</h2>
+        <p id="hunter-status" class="muted">Checks each mailbox for real, and finds emails when a website lists none. It stays in this browser only.</p>
+        <input id="hunter-key" type="password" placeholder="Paste your Hunter API key">
+        <button id="btn-hunter-save" class="secondary">Save key</button>
+        <label class="check small"><input id="use-hunter" type="checkbox" checked> Check every email with Hunter (1 verification credit each)</label>
+      </div>
+
+      <div class="card" id="sheet-card">
+        <h2>4. Leads sheet</h2>
+        <div id="sheet-connected" hidden>
+          <p>Saving leads to <a id="sheet-link" target="_blank" rel="noopener"></a></p>
+          <button id="btn-sheet-disconnect" class="secondary">Use a different sheet</button>
+        </div>
+        <div id="sheet-setup">
+          <button id="btn-sheet-create" class="primary">Create a new leads sheet</button>
+          <p class="muted or">or connect one you already have</p>
+          <input id="sheet-input" type="text" placeholder="Paste the Google Sheet link">
+          <button id="btn-sheet-connect" class="secondary">Connect sheet</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-leads" class="panel">
+      <div class="card">
+        <h2>From the page you have open</h2>
+        <p class="muted">Open a business on Google Maps or Yelp, or any business website, then press the button. It reads the listing, checks the business website for emails, and verifies them.</p>
+        <button id="btn-scan" class="primary">Find emails on this page</button>
+        <p id="scan-info" class="muted small" hidden></p>
+      </div>
+
+      <div class="card">
+        <h2>Search Apollo</h2>
+        <select id="apollo-preset">
+          <option value="">Choose a starting point…</option>
+          <option value="authors">Self-published children's authors</option>
+          <option value="publishers">Small children's publishers</option>
+          <option value="educators">Educators and learning brands</option>
+          <option value="coaches">Coaches needing lead magnets or workbooks</option>
+        </select>
+        <input id="apollo-titles" placeholder="Job titles, comma separated">
+        <input id="apollo-keywords" placeholder="Keywords">
+        <input id="apollo-locations" placeholder="Locations, e.g. United States, United Kingdom">
+        <button id="btn-apollo-search" class="primary">Search</button>
+        <div id="apollo-results" hidden>
+          <div class="row-between"><p id="apollo-count" class="muted small"></p><button id="btn-apollo-all" class="link small">Select all</button></div>
+          <ul id="apollo-list" class="lead-list"></ul>
+          <div class="row-gap">
+            <button id="btn-apollo-more" class="secondary">More results</button>
+            <button id="btn-apollo-reveal" class="primary">Get emails for selected</button>
+          </div>
+          <p class="muted small">Getting emails uses one Apollo credit per person.</p>
+        </div>
+      </div>
+
+      <div class="card" id="found-card" hidden>
+        <div class="row-between"><h2>Found emails</h2><button id="btn-found-clear" class="link small">Clear</button></div>
+        <p class="muted small">Verified and valid emails are ticked. Invalid ones are left out unless you tick them.</p>
+        <ul id="found-list" class="lead-list"></ul>
+        <button id="btn-found-save" class="primary">Save ticked to sheet</button>
+      </div>
+
+      <div class="card">
+        <h2>Add a lead by hand</h2>
+        <form id="lead-form">
+          <input name="Name" placeholder="Contact name">
+          <input name="Business" placeholder="Business name">
+          <input name="Email" type="email" placeholder="Email" required>
+          <input name="Website" placeholder="Website">
+          <input name="Phone" placeholder="Phone">
+          <input name="Location" placeholder="City / area">
+          <textarea name="Notes" rows="2" placeholder="Notes (their problem, anything useful for the email)"></textarea>
+          <button type="submit" class="primary">Check and save to sheet</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="row-between">
+          <h2>Saved leads</h2>
+          <button id="btn-refresh" class="link">Refresh</button>
+        </div>
+        <ul id="lead-list" class="lead-list"><li class="muted">Connect a sheet to see leads.</li></ul>
+      </div>
+    </section>
+    <section id="tab-compose" class="panel">
+      <details class="card" id="profile-card">
+        <summary><h2>Your details</h2></summary>
+        <p class="muted small">Added under every email. US and EU law requires a way to opt out and a postal address on commercial email.</p>
+        <input id="pf-name" placeholder="Your name and title, e.g. Ada Lee, Children's Book Illustrator">
+        <input id="pf-portfolio" placeholder="Portfolio link">
+        <input id="pf-address" placeholder="Mailing address (city and country at minimum)">
+        <input id="pf-samples" placeholder="Samples link for follow-ups (e.g. a Google Drive folder)">
+        <input id="pf-reviews" placeholder="Reviews link for the last follow-up (e.g. your Upwork profile)">
+        <label class="small muted">Daily sending limit</label>
+        <input id="pf-limit" type="number" min="1" max="200" value="30">
+        <button id="btn-profile-save" class="secondary">Save details</button>
+      </details>
+
+      <div class="card">
+        <div class="row-between"><h2>Ready to email</h2><button id="btn-ready-load" class="link">Reload</button></div>
+        <p id="ready-info" class="muted small">Press Reload to load leads from your sheet.</p>
+        <div id="draft" hidden>
+          <p class="small"><strong>To:</strong> <span id="d-to"></span> <span id="d-who" class="muted"></span></p>
+          <label class="small muted">Who they are</label>
+          <select id="d-segment"></select>
+          <label class="small muted">Subject</label>
+          <input id="d-subject">
+          <label class="small muted">Message <span id="d-count"></span></label>
+          <textarea id="d-body" rows="7"></textarea>
+          <pre id="d-footer" class="footer-preview"></pre>
+          <div class="row-gap">
+            <button id="btn-d-new" class="secondary">New version</button>
+            <button id="btn-d-skip" class="secondary">Skip lead</button>
+          </div>
+          <button id="btn-d-send" class="primary" style="margin-top:8px">Send from Gmail</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-between"><h2>Follow-ups due</h2><button id="btn-fu-load" class="link">Reload</button></div>
+        <p id="fu-info" class="muted small">No reply after 4 days gets follow-up 1 (samples). No reply 7 days after that gets follow-up 2 (a polite last email). Then it stops.</p>
+        <div id="fu" hidden>
+          <p class="small"><strong>To:</strong> <span id="fu-to"></span> <span id="fu-who" class="muted"></span></p>
+          <p class="small muted" id="fu-step"></p>
+          <label class="small muted">Who they are</label>
+          <select id="fu-segment"></select>
+          <label class="small muted">Message <span id="fu-count"></span></label>
+          <textarea id="fu-body" rows="7"></textarea>
+          <p class="muted small">Sent as a reply in the same Gmail conversation, with your signature and opt-out line underneath.</p>
+          <div class="row-gap">
+            <button id="btn-fu-later" class="secondary">Later</button>
+            <button id="btn-fu-stop" class="secondary">No more follow-ups</button>
+          </div>
+          <button id="btn-fu-send" class="primary" style="margin-top:8px">Send follow-up</button>
+        </div>
+      </div>
+    </section>
+    <section id="tab-analytics" class="panel">
+      <div class="card">
+        <div class="row-between"><h2>Results</h2><button id="btn-check" class="link">Check inbox now</button></div>
+        <p id="an-last" class="muted small"></p>
+        <div class="stats">
+          <div class="stat"><div class="num" id="st-sent">0</div><div class="lbl">Sent</div></div>
+          <div class="stat"><div class="num" id="st-bounced">0</div><div class="lbl">Bounced</div></div>
+          <div class="stat"><div class="num" id="st-opened">–</div><div class="lbl">Opened</div></div>
+          <div class="stat ok"><div class="num" id="st-replied">0</div><div class="lbl">Replied</div></div>
+          <div class="stat"><div class="num" id="st-declined">0</div><div class="lbl">Declined</div></div>
+          <div class="stat"><div class="num" id="st-awaiting">0</div><div class="lbl">No reply yet</div></div>
+        </div>
+        <p id="an-rates" class="small"></p>
+        <p class="muted small">Opens aren't tracked. That needs a tracking image hosted on a server, and Apple Mail and Gmail often block or fake opens anyway. Replies are the number that matters.</p>
+      </div>
+      <div class="card">
+        <h2>Sent per day</h2>
+        <div id="an-days" class="bars"></div>
+      </div>
+      <div class="card">
+        <h2>Latest responses</h2>
+        <ul id="an-recent" class="lead-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>
