@@ -3,6 +3,8 @@ import { LANGS, pickLang } from "./lib/i18n.js";
 import { SUBJECT_STYLES, OPENER_STYLES, pickStyle } from "./lib/learn.js";
 import { parseResearch, SIGN_LABELS } from "./lib/research.js";
 import { STRICT } from "./lib/country.js";
+import { toCsv } from "./lib/csv.js";
+import { LEAD_COLUMNS } from "./lib/sheets.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -196,6 +198,8 @@ function renderCaptures(force) {
   const list = $("cap-list");
   if (!force && list.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
   const shown = caps.filter((c) => capFilter === "all" || (capFilter === "working" ? ["new", "checking"].includes(c.status) : c.status === capFilter));
+  const top = (c) => Math.max(0, ...(c.leads || []).map((l) => Number(l.Score) || 0));
+  if (capFilter === "ready") shown.sort((a, b) => top(b) - top(a)); // best leads first
   const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.leads?.length, c.website, !!c.research]));
   if (!force && sig === lastSig) return;
   lastSig = sig;
@@ -229,6 +233,7 @@ function renderCaptures(force) {
         const line = el("div", "email", l.Email);
         const badge = el("span", `badge ${l.Verification}`, l.Verification);
         line.append(badge);
+        if (l.Score) { const sc = el("span", `score ${Number(l.Score) >= 60 ? "hi" : Number(l.Score) >= 35 ? "mid" : "lo"}`, l.Score); sc.title = `Lead score ${l.Score}/100: ${l.scoreWhy || ""}`; line.append(sc); }
         body.append(line, el("div", "meta", [l.Name !== c.name ? l.Name : "", l.verifyReason].filter(Boolean).join(" · ")));
         row.append(box, body);
         ul.append(row);
@@ -428,6 +433,62 @@ $("btn-apollo-reveal").addEventListener("click", (e) => withBusy(e.target, async
 
 $("btn-refresh").addEventListener("click", loadLeads);
 
+// ---------- CSV export and backup ----------
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+const stamp = () => new Date().toISOString().slice(0, 10);
+const CAP_COLUMNS = ["Status", "Score", "Name", "Business", "Email", "Verification", "Website", "Phone", "Location", "Country", "Language", "Source", "Source URL", "Notes", "Research", "Rating"];
+
+$("btn-cap-csv").addEventListener("click", () => {
+  if (!caps.length) { toast("Nothing captured yet", "err"); return; }
+  const rows = [];
+  for (const c of caps) {
+    const base = { Status: STATUS_TEXT[c.status] || c.status, Name: c.name, Business: c.business, Website: c.website, Phone: c.phone, Location: c.address, Country: c.country, Language: c.lang ? LANGS[c.lang] : "", Source: c.source, "Source URL": c.profileUrl, Notes: c.note, Research: researchLine(c.research), Rating: c.rating };
+    if (c.leads?.length) for (const l of c.leads) rows.push({ ...base, Name: l.Name || c.name, Email: l.Email, Verification: l.Verification, Score: l.Score || "" });
+    else rows.push(base);
+  }
+  download(`captured-leads-${stamp()}.csv`, toCsv(rows, CAP_COLUMNS), "text/csv;charset=utf-8");
+  toast(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}`);
+});
+
+$("btn-leads-csv").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const { leads } = await send("listLeads");
+  if (!leads.length) throw new Error("Your sheet has no leads yet.");
+  download(`saved-leads-${stamp()}.csv`, toCsv(leads, LEAD_COLUMNS), "text/csv;charset=utf-8");
+  toast(`Exported ${leads.length} lead${leads.length === 1 ? "" : "s"}`);
+}));
+
+$("btn-backup").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const { data } = await send("backup");
+  try { data.jobForm = JSON.parse(localStorage.getItem("jobForm") || "null"); } catch (_) {}
+  download(`outreach-assistant-backup-${stamp()}.json`, JSON.stringify(data, null, 1), "application/json");
+  const n = Object.keys(data.local.captures || {}).length;
+  $("backup-info").textContent = `Backup downloaded: ${n} captured lead${n === 1 ? "" : "s"}${data.sheetLeads ? ` and ${data.sheetLeads.length} sheet lead${data.sheetLeads.length === 1 ? "" : "s"}` : ""}.`;
+}));
+$("btn-restore").addEventListener("click", () => $("backup-file").click());
+$("backup-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const r = await send("restore", { data });
+    try { if (data.jobForm) localStorage.setItem("jobForm", JSON.stringify(data.jobForm)); } catch (_) {}
+    $("backup-info").textContent = `Restored your details and settings, and added ${r.captures} captured lead${r.captures === 1 ? "" : "s"}.`;
+    toast("Backup restored");
+    await refresh();
+    loadCaptures(true);
+  } catch (err) { toast(err instanceof SyntaxError ? "That file isn't a backup file." : err.message, "err"); }
+});
+
 async function loadLeads() {
   const list = $("lead-list");
   try {
@@ -558,7 +619,7 @@ function showDraft(fresh) {
   const lang = $("d-lang").value;
   draft = makeDraft(lead, { segment: $("d-segment").value, lang, subjectStyle, openerStyle });
   $("d-to").textContent = lead.Email;
-  $("d-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}${lead.Country ? `, ${lead.Country}` : ""}) · ${idx + 1} of ${ready.length}`;
+  $("d-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}${lead.Country ? `, ${lead.Country}` : ""}) · score ${lead.Score || "?"} · ${idx + 1} of ${ready.length}, best first`;
   $("d-subject").value = draft.subject;
   $("d-body").value = draft.body;
   const r = researchLine(parseResearch(lead.Research));
@@ -616,7 +677,7 @@ $("btn-d-send").addEventListener("click", (e) => withBusy(e.target, async () => 
   const lang = $("d-lang").value;
   await send("sendLeadEmail", {
     row: lead.row, to: lead.Email, subject, text: `${body}\n${footer(profile, lead, lang)}`,
-    subjectStyle: draft.subjectStyle, openerStyle: draft.openerStyle, lang, sendAnyway: $("d-anyway").checked,
+    subjectStyle: draft.subjectStyle, openerStyle: draft.openerStyle, mainPoint: draft.mainPoint, lang, sendAnyway: $("d-anyway").checked,
   });
   toast(`Sent to ${lead.Email}`);
   nextLead();

@@ -165,3 +165,15 @@ New columns in the sheet: **Country** and **Rating**.
 **Learning from replies.** Each email uses one of four subject styles (Question, Curiosity, Benefit, About their book) and one of three openers (something from their website, a common problem, a direct question). The tool records which ones were used and, as replies come in, leans towards the ones that work while still trying the others. See **What's working** in Analytics.
 
 New sheet columns: **Research**, **Language**, **Subject Style**, **Opener Style**. Connect your sheet again (or just load Compose) and the header updates itself.
+
+---
+
+# Phase 3: lead score, follow-ups that remember, CSV and backup (version 0.9)
+
+**Lead score (0 to 100).** Every email found gets a score, shown as a small coloured number next to it in the Captured list (hover it to see why). It goes up for a confirmed mailbox, a personal address rather than info@, signs they need help now (looking for an illustrator scores most), book titles, picture or activity books, and a name and website. It goes down when they already credit an illustrator, when the email is on another domain, and for Germany and Austria. The **Ready** filter and the Compose tab both show the best leads first. Saved in the new **Score** column.
+
+**Follow-ups refer back to the first email.** When an email is sent, its main point is saved (for example "your search for an illustrator", the book title, or the topic of the opener) in the new **Main Point** column. Both follow-ups open with a line that refers back to it, for example "Following up on my note about your search for an illustrator." in the lead's language. Leads emailed before this version simply don't get that line.
+
+**CSV export.** **Export CSV** under the Captured list downloads everything captured, one row per email. **Export all saved leads as CSV** under Saved leads downloads your whole sheet. Both open in Excel, Google Sheets or any CRM.
+
+**Backup.** Setup, card 6: **Download backup** saves one file with your captured leads, your details, your settings and a copy of every lead in your sheet. API keys are never in it. **Restore from backup** puts the captured leads, details and settings back, on this computer or a new one. It adds to what's there and never deletes anything, and it doesn't change your Google Sheet.

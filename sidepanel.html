@@ -68,6 +68,16 @@
           <button id="btn-sheet-connect" class="secondary">Connect sheet</button>
         </div>
       </div>
+      <div class="card">
+        <h2>6. Backup</h2>
+        <p class="muted small">Downloads one file with your captured leads, your details, your settings and a copy of every lead in your sheet. API keys are never included. Restoring puts back the captured leads, details and settings on this or another computer; your Google Sheet itself is not changed.</p>
+        <div class="row-gap">
+          <button id="btn-backup" class="secondary">Download backup</button>
+          <button id="btn-restore" class="secondary">Restore from backup</button>
+        </div>
+        <input id="backup-file" type="file" accept=".json,application/json" hidden>
+        <p id="backup-info" class="muted small"></p>
+      </div>
     </section>
 
     <section id="tab-leads" class="panel">
@@ -117,6 +127,7 @@
         <div class="row-gap">
           <button id="btn-cap-clear-saved" class="secondary">Clear saved</button>
           <button id="btn-cap-clear-dead" class="secondary">Clear no-email</button>
+          <button id="btn-cap-csv" class="secondary">Export CSV</button>
         </div>
       </div>
 
@@ -163,6 +174,7 @@
           <button id="btn-refresh" class="link">Refresh</button>
         </div>
         <ul id="lead-list" class="lead-list"><li class="muted">Connect a sheet to see leads.</li></ul>
+        <button id="btn-leads-csv" class="secondary" style="margin-top:8px">Export all saved leads as CSV</button>
       </div>
     </section>
     <section id="tab-compose" class="panel">

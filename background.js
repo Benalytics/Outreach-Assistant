@@ -7,9 +7,10 @@ import { searchPeople, revealEmails } from "./lib/apollo.js";
 import { verifyLeads } from "./lib/verify.js";
 import { hunterAccount } from "./lib/hunter.js";
 import { extractPage } from "./lib/extract.js";
-import { addCaptures, addReadyLeads, allCaptures, runQueue, supplyContact, removeCaptures, clearCaptures, updateCapture } from "./lib/captures.js";
+import { addCaptures, addReadyLeads, allCaptures, runQueue, supplyContact, removeCaptures, clearCaptures, updateCapture, mergeCaptures } from "./lib/captures.js";
 import { startJob, stopJob, getJob, runJob, AUTO_SOURCES } from "./lib/job.js";
 import { styleStats } from "./lib/learn.js";
+import { scoreLead } from "./lib/score.js";
 import { STRICT } from "./lib/country.js";
 import { translate, deeplUsage } from "./lib/deepl.js";
 
@@ -136,7 +137,7 @@ const handlers = {
   async addLeads({ leads }) {
     const { sheet } = await chrome.storage.local.get("sheet");
     if (!sheet) throw new Error("Connect a Google Sheet first.");
-    return appendLeads(sheet.id, leads);
+    return appendLeads(sheet.id, leads.map((l) => (l.Score ? l : { ...l, Score: String(scoreLead(l).score) })));
   },
   async saveApolloKey({ key }) {
     const k = (key || "").trim();
@@ -197,7 +198,7 @@ const handlers = {
     for (const { id, email } of picks) {
       const l = all[id]?.leads.find((x) => x.Email === email);
       if (!l) continue;
-      const { verifyReason, apolloStatus, hunterStatus, offDomain, ...clean } = l;
+      const { verifyReason, apolloStatus, hunterStatus, offDomain, scoreWhy, ...clean } = l;
       leads.push(clean);
     }
     const r = await appendLeads(sheet.id, leads);
@@ -226,11 +227,13 @@ const handlers = {
     await connectSheet(sheet.id); // makes sure the header has the newest columns
     const leads = await getLeads(sheet.id);
     const sentToday = sentTodayCount(leads);
-    const ready = leads.filter((l) => l.Email && !l["Email Status"] && ["Verified", "Valid"].includes(l.Verification));
+    const ready = leads.filter((l) => l.Email && !l["Email Status"] && ["Verified", "Valid"].includes(l.Verification))
+      .map((l) => (l.Score ? l : { ...l, Score: String(scoreLead(l).score) }))
+      .sort((a, b) => Number(b.Score) - Number(a.Score)); // best leads first
     const followUps = leads.filter(followUpDue);
     return { ready, sentToday, followUps, weekend: isWeekend(), stats: styleStats(leads) };
   },
-  async sendLeadEmail({ row, to, subject, text, subjectStyle = "", openerStyle = "", lang = "", sendAnyway = false }) {
+  async sendLeadEmail({ row, to, subject, text, subjectStyle = "", openerStyle = "", lang = "", mainPoint = "", sendAnyway = false }) {
     const { sheet, userEmail, profile } = await chrome.storage.local.get(["sheet", "userEmail", "profile"]);
     if (!sheet) throw new Error("Connect a Google Sheet first.");
     const limit = Number(profile?.dailyLimit) || 30;
@@ -247,7 +250,7 @@ const handlers = {
     const { threadId } = await sendEmail({ to, subject, text, from: userEmail });
     await updateLead(sheet.id, row, {
       "Email Status": "Sent", "Sent At": new Date().toISOString(), Subject: subject, "Gmail Thread ID": threadId,
-      "Subject Style": subjectStyle, "Opener Style": openerStyle, ...(lang ? { Language: lang } : {}),
+      "Subject Style": subjectStyle, "Opener Style": openerStyle, "Main Point": mainPoint, ...(lang ? { Language: lang } : {}),
     });
     return { threadId };
   },
@@ -303,6 +306,27 @@ const handlers = {
   async translate({ texts, lang, country }) {
     const { deeplFormal = true } = await chrome.storage.local.get("deeplFormal");
     return { texts: await translate(texts, lang, { formal: deeplFormal, country }) };
+  },
+  // ---------- Backup ----------
+  // Everything kept in this browser except API keys and sign-in, plus a copy of the sheet.
+  async backup() {
+    const keep = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal", "jobDaily"];
+    const local = await chrome.storage.local.get(keep);
+    let sheetLeads = null;
+    if (local.sheet) { try { sheetLeads = (await getLeads(local.sheet.id)).map(({ row, ...l }) => l); } catch (_) {} }
+    return { data: { app: "Outreach Assistant", version: chrome.runtime.getManifest().version, savedAt: new Date().toISOString(), local, sheetLeads } };
+  },
+  async restore({ data }) {
+    if (data?.app !== "Outreach Assistant" || !data.local) throw new Error("That file isn't an Outreach Assistant backup.");
+    const allowed = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal"];
+    const set = {};
+    for (const k of allowed) if (data.local[k] !== undefined) set[k] = data.local[k];
+    const list = set.captures ? Object.values(set.captures) : [];
+    delete set.captures;
+    await chrome.storage.local.set(set);
+    const added = list.length ? await mergeCaptures(list) : 0;
+    runQueue();
+    return { captures: added || 0 };
   },
   async checkNow() {
     const r = await runInboxCheck();

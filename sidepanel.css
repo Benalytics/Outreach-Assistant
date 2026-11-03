@@ -124,3 +124,7 @@ table.styles { width: 100%; border-collapse: collapse; font-size: 12px; margin-t
 table.styles th, table.styles td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--border); }
 table.styles td.n { text-align: right; }
 table.styles tr.best td { font-weight: 600; }
+.score { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 0 6px; margin-left: 4px; border: 1px solid currentColor; cursor: help; }
+.score.hi { color: var(--ok); }
+.score.mid { color: #b7791f; }
+.score.lo { color: var(--muted); }
