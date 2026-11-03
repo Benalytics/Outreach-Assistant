@@ -71,3 +71,44 @@ label { display: block; margin: 2px 0 4px; }
 .lead-list a.email { text-decoration: none; }
 label.check { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
 label.check input { width: auto; margin: 0; }
+
+/* ---------- capture ---------- */
+.checks { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 8px; }
+.checks label.check { margin-top: 0; }
+.grow { flex: 1; }
+.grow input { margin-top: 4px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
+.chip { border: 1px solid var(--border); background: none; color: var(--muted); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+.chip.active { color: var(--text); border-color: var(--accent); }
+.cap-list { list-style: none; margin: 0 0 10px; padding: 0; max-height: 60vh; overflow-y: auto; }
+.cap-list > li { border-top: 1px solid var(--border); padding: 10px 0; }
+.cap-list > li:first-child { border-top: 0; }
+.cap-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.cap-name { font-weight: 600; word-break: break-word; }
+.cap-meta { color: var(--muted); font-size: 12px; word-break: break-word; }
+.cap-emails { list-style: none; padding: 0; margin: 6px 0 0; }
+.cap-emails li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; }
+.cap-emails input { width: auto; margin: 3px 0 0; }
+.cap-fix { display: flex; gap: 6px; margin-top: 6px; }
+.cap-fix input { margin: 0; }
+.cap-fix button { width: auto; padding: 6px 10px; white-space: nowrap; }
+.cap-actions { display: flex; gap: 12px; margin-top: 4px; }
+.status { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.status.ready, .status.saved { color: var(--ok); }
+.status.no_email, .status.error { color: var(--err); }
+.status.needs_website, .status.new, .status.checking { color: var(--muted); }
+.flag { display: inline-block; font-size: 11px; color: var(--err); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 4px; }
+
+/* ---------- full-page dashboard ---------- */
+body.full header { padding: 16px 32px 0; }
+body.full header nav { max-width: 560px; }
+body.full main { max-width: 1180px; margin: 0 auto; padding: 20px 32px 48px; }
+body.full #btn-full { display: none; }
+body.full .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+body.full .cap-list { max-height: none; }
+body.full #tab-setup.active, body.full #tab-compose.active { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+body.full #tab-analytics.active { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+body.full #tab-analytics .card:first-child { grid-row: span 2; }
+body.full .lead-list { max-height: 70vh; }
+@media (max-width: 760px) { body.full .cols, body.full #tab-setup.active, body.full #tab-compose.active, body.full #tab-analytics.active { display: block; } }
+.row-gap > label.grow { display: flex; flex-direction: column; justify-content: flex-end; }

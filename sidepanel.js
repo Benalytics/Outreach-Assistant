@@ -32,7 +32,7 @@ document.querySelectorAll(".tab").forEach((btn) => {
     if (btn.disabled) return;
     document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
     document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${btn.dataset.tab}`));
-    if (btn.dataset.tab === "leads") loadLeads();
+    if (btn.dataset.tab === "leads") { loadLeads(); loadCaptures(true); }
     if (btn.dataset.tab === "analytics") loadAnalytics();
     if (btn.dataset.tab === "compose") { loadProfile(); if (!ready.length) loadReady(); }
   });
@@ -46,6 +46,7 @@ function render(state) {
   $("sheet-card").querySelectorAll("button, input").forEach((el) => { el.disabled = !state.signedIn; });
   $("apollo-status").textContent = state.hasApolloKey ? "Apollo key saved." : "Used to find people on Apollo. It stays in this browser only.";
   $("use-hunter").checked = state.useHunter !== false;
+  $("use-hunter-search").checked = state.useHunterSearch !== false;
   if (!state.hasHunterKey) $("hunter-status").textContent = "Checks each mailbox for real, and finds emails when a website lists none. It stays in this browser only.";
   else if (!hunterShown) { hunterShown = true; showHunterCredits(); }
   $("sheet-connected").hidden = !state.sheet;
@@ -133,74 +134,185 @@ $("btn-hunter-save").addEventListener("click", (e) => withBusy(e.target, async (
   await refresh();
 }));
 $("use-hunter").addEventListener("change", (e) => send("setUseHunter", { on: e.target.checked }));
+$("use-hunter-search").addEventListener("change", (e) => send("setUseHunterSearch", { on: e.target.checked }));
 
-// ---------- Found emails (shared by page scan and Apollo) ----------
-let found = [];
+// ---------- Captured (everything captured, by hand, automatically or from Apollo) ----------
 const clean = (l) => { const { verifyReason, apolloStatus, hunterStatus, picked, offDomain, ...rest } = l; return rest; };
+let caps = [];
+let capFilter = "all";
+const picks = new Map(); // "id|email" -> ticked
+const STATUS_TEXT = { new: "Waiting", checking: "Checking…", ready: "Ready", needs_website: "Needs website", no_email: "No email found", saved: "Saved", error: "Error" };
+const goodEmail = (l) => !l.offDomain && (l.Verification === "Verified" || l.Verification === "Valid");
+const isPicked = (c, l) => { const k = `${c.id}|${l.Email}`; return picks.has(k) ? picks.get(k) : goodEmail(l); };
 
-function addFound(leads) {
-  const have = new Set(found.map((l) => l.Email));
-  for (const l of leads) {
-    if (!l.Email || have.has(l.Email)) continue;
-    have.add(l.Email);
-    found.push({ ...l, picked: !l.offDomain && (l.Verification === "Verified" || l.Verification === "Valid") });
-  }
-  renderFound();
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
 }
 
-function renderFound() {
-  $("found-card").hidden = !found.length;
-  const list = $("found-list");
+let lastSig = "";
+function renderCaptures(force) {
+  const list = $("cap-list");
+  if (!force && list.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
+  const shown = caps.filter((c) => capFilter === "all" || (capFilter === "working" ? ["new", "checking"].includes(c.status) : c.status === capFilter));
+  const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.leads?.length, c.website]));
+  if (!force && sig === lastSig) return;
+  lastSig = sig;
+  const count = (st) => caps.filter((c) => st.includes(c.status)).length;
+  $("cap-counts").textContent = caps.length ? `${count(["ready"])} ready · ${count(["new", "checking"])} checking · ${count(["needs_website"])} need a website` : "";
   list.replaceChildren();
-  found.forEach((l, i) => {
-    const li = document.createElement("li");
-    li.className = "pick";
-    const box = document.createElement("input");
-    box.type = "checkbox";
-    box.checked = l.picked;
-    box.addEventListener("change", () => { found[i].picked = box.checked; });
-    const body = document.createElement("div");
-    const email = document.createElement("div");
-    email.className = "email";
-    email.textContent = l.Email;
-    const badge = document.createElement("span");
-    badge.className = `badge ${l.Verification}`;
-    badge.textContent = l.Verification;
-    email.append(badge);
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    meta.textContent = [l.Name, l.Business, l.Source].filter(Boolean).join(" · ");
-    const why = document.createElement("div");
-    why.className = "meta";
-    why.textContent = l.verifyReason || "";
-    body.append(email, meta, why);
-    li.append(box, body);
+  if (!shown.length) { list.append(el("li", "muted small", caps.length ? "Nothing here." : "Nothing captured yet. Capture a page, start automatic capture, or search Apollo.")); return; }
+  for (const c of shown.slice(0, 300)) {
+    const li = el("li");
+    const head = el("div", "cap-head");
+    const title = el("div", "cap-name", c.business || c.name || c.website || "(no name)");
+    if (c.strict) title.append(el("span", "flag", `${c.country}: held back from sending`));
+    head.append(title, el("span", `status ${c.status}`, STATUS_TEXT[c.status] || c.status));
+    li.append(head);
+    const metaBits = [c.business && c.name ? c.name : "", c.source, c.country, c.handle, c.rating && `★ ${c.rating}${c.reviews ? ` (${c.reviews})` : ""}`, c.website && new URL(c.website).hostname.replace(/^www\./, "")].filter(Boolean);
+    li.append(el("div", "cap-meta", metaBits.join(" · ")));
+    if (c.note) li.append(el("div", "cap-meta", c.note));
+    if (c.error) li.append(el("div", "cap-meta", c.error));
+
+    if (c.status === "ready" && c.leads?.length) {
+      const ul = el("ul", "cap-emails");
+      for (const l of c.leads) {
+        const row = el("li");
+        const box = el("input");
+        box.type = "checkbox";
+        box.checked = isPicked(c, l);
+        box.addEventListener("change", () => picks.set(`${c.id}|${l.Email}`, box.checked));
+        const body = el("div");
+        const line = el("div", "email", l.Email);
+        const badge = el("span", `badge ${l.Verification}`, l.Verification);
+        line.append(badge);
+        body.append(line, el("div", "meta", [l.Name !== c.name ? l.Name : "", l.verifyReason].filter(Boolean).join(" · ")));
+        row.append(box, body);
+        ul.append(row);
+      }
+      li.append(ul);
+    }
+    if (c.status === "needs_website" || c.status === "no_email") {
+      const fix = el("div", "cap-fix");
+      const inp = el("input");
+      inp.placeholder = c.status === "needs_website" ? "Their website or email" : "Another website, or an email you found";
+      const go = el("button", "secondary", "Check");
+      go.addEventListener("click", () => withBusy(go, async () => {
+        const v = inp.value.trim();
+        if (!v) throw new Error("Type a website or an email first.");
+        await send("supplyContact", v.includes("@") ? { id: c.id, email: v } : { id: c.id, website: v });
+        toast("Checking it now");
+        await loadCaptures(true);
+      }));
+      fix.append(inp, go);
+      li.append(fix);
+    }
+    const acts = el("div", "cap-actions");
+    if (c.profileUrl) { const a = el("a", "small", "Open source"); a.href = c.profileUrl; a.target = "_blank"; acts.append(a); }
+    if (c.status === "needs_website" || c.status === "no_email") {
+      const a = el("a", "small", "Search Google for them");
+      a.href = `https://www.google.com/search?q=${encodeURIComponent([c.name || c.business, c.note?.replace(/^Book: /, "").split(" · ")[0], c.name ? "author website" : "contact email"].filter(Boolean).join(" "))}`;
+      a.target = "_blank";
+      acts.append(a);
+    }
+    if (c.status === "error" || c.status === "no_email") { const b = el("button", "link small", "Try again"); b.addEventListener("click", async () => { await send("retryCapture", { id: c.id }); loadCaptures(true); }); acts.append(b); }
+    const rm = el("button", "link small", "Remove");
+    rm.addEventListener("click", async () => { await send("removeCaptures", { ids: [c.id] }); loadCaptures(true); });
+    acts.append(rm);
+    li.append(acts);
     list.append(li);
-  });
+  }
 }
 
-$("btn-found-clear").addEventListener("click", () => { found = []; renderFound(); });
+let job = null;
+function renderJob() {
+  const running = job?.status === "running";
+  $("btn-job-start").hidden = running;
+  $("btn-job-stop").hidden = !running;
+  if (!job) { $("job-info").textContent = ""; return; }
+  $("job-info").textContent = running
+    ? `${job.message || "Working…"} Captured ${job.captured}, ${job.ready} of ${job.target} ready. Page ${Math.min(job.idx + 1, job.tasks.length)} of ${job.tasks.length}.`
+    : job.message || "";
+}
 
-$("btn-found-save").addEventListener("click", (e) => withBusy(e.target, async () => {
-  const picked = found.filter((l) => l.picked);
-  if (!picked.length) { toast("Tick at least one email", "err"); return; }
-  const { added, skipped } = await send("addLeads", { leads: picked.map(clean) });
-  toast(`Saved ${added} lead${added === 1 ? "" : "s"}${skipped ? `, ${skipped} already in your sheet` : ""}`);
-  found = found.filter((l) => !l.picked);
-  renderFound();
+async function loadCaptures(force) {
+  try {
+    const r = await send("captures");
+    caps = r.captures;
+    job = r.job;
+    renderCaptures(force);
+    renderJob();
+  } catch (e) { /* panel may be closing */ }
+}
+
+$("cap-filters").addEventListener("click", (e) => {
+  const b = e.target.closest(".chip");
+  if (!b) return;
+  capFilter = b.dataset.f;
+  document.querySelectorAll("#cap-filters .chip").forEach((x) => x.classList.toggle("active", x === b));
+  renderCaptures(true);
+});
+
+$("btn-cap-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const chosen = [];
+  for (const c of caps) if (c.status === "ready") for (const l of c.leads) if (isPicked(c, l)) chosen.push({ id: c.id, email: l.Email });
+  if (!chosen.length) throw new Error("Nothing ticked to save yet.");
+  const { added, skipped } = await send("saveCaptured", { picks: chosen });
+  toast(`Saved ${added} lead${added === 1 ? "" : "s"} to your sheet${skipped ? `, ${skipped} already there` : ""}`);
+  await loadCaptures(true);
   loadLeads();
 }));
+$("btn-cap-clear-saved").addEventListener("click", async () => { await send("clearCaptures", { statuses: ["saved"] }); loadCaptures(true); });
+$("btn-cap-clear-dead").addEventListener("click", async () => { await send("clearCaptures", { statuses: ["no_email", "error"] }); loadCaptures(true); });
 
-// ---------- Scan the open page ----------
-$("btn-scan").addEventListener("click", (e) => withBusy(e.target, async () => {
-  const info = $("scan-info");
+// ---------- Capture by hand ----------
+async function capture(quiet) {
+  const r = await send("capturePage", { quiet });
+  if (quiet && !r.added) return;
+  const info = $("capture-info");
   info.hidden = false;
-  info.textContent = "Reading the page and checking the website…";
-  const r = await send("scanActiveTab");
-  const where = r.business.website ? `checked ${r.pagesChecked} page${r.pagesChecked === 1 ? "" : "s"} on ${new URL(r.business.website).hostname}` : "no website listed, so there's nowhere to look for an email";
-  info.textContent = `${r.business.name || "This page"} (${r.business.site}): ${where}. ${r.leads.length ? `Found ${r.leads.length} email${r.leads.length === 1 ? "" : "s"}.` : "No emails found."}${r.websiteError ? " " + r.websiteError + "." : ""}${r.hunterNote ? " " + r.hunterNote : ""}${r.dropped ? ` Ignored ${r.dropped} that didn't belong to the business.` : ""}`;
-  addFound(r.leads);
+  info.textContent = r.added || r.duplicates
+    ? `${r.source}: captured ${r.added} new${r.duplicates ? `, ${r.duplicates} already captured` : ""}. ${r.message || ""}`
+    : r.message || "Nothing new on this page.";
+  await loadCaptures(true);
+}
+$("btn-capture").addEventListener("click", (e) => withBusy(e.target, () => capture(false)));
+let watchTimer = null;
+$("watch").addEventListener("change", (e) => {
+  clearInterval(watchTimer);
+  if (e.target.checked) {
+    watchTimer = setInterval(() => capture(true).catch(() => {}), 4000);
+    toast("Capturing every few seconds while you scroll. Untick to stop.");
+  }
+});
+
+// ---------- Automatic capture ----------
+$("btn-job-start").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const sources = [...document.querySelectorAll('input[name="job-src"]:checked')].map((x) => x.value);
+  await send("jobStart", {
+    keyword: $("job-keyword").value, place: $("job-place").value, sources,
+    target: Number($("job-target").value), pagesPerDay: Number($("job-pages").value),
+  });
+  try { localStorage.setItem("jobForm", JSON.stringify({ k: $("job-keyword").value, p: $("job-place").value, s: sources, t: $("job-target").value, n: $("job-pages").value })); } catch (_) {}
+  toast("Automatic capture started in a small separate window");
+  await loadCaptures(true);
 }));
+$("btn-job-stop").addEventListener("click", (e) => withBusy(e.target, async () => { await send("jobStop"); await loadCaptures(true); }));
+try {
+  const f = JSON.parse(localStorage.getItem("jobForm") || "null");
+  if (f) {
+    $("job-keyword").value = f.k || ""; $("job-place").value = f.p || ""; $("job-target").value = f.t || 30; $("job-pages").value = f.n || 40;
+    document.querySelectorAll('input[name="job-src"]').forEach((x) => { x.checked = (f.s || []).includes(x.value); });
+  }
+} catch (_) {}
+
+setInterval(() => { if (!document.hidden && $("tab-leads").classList.contains("active")) loadCaptures(false); }, 3000);
+
+// ---------- Full page ----------
+if (new URLSearchParams(location.search).get("full")) document.body.classList.add("full");
+$("btn-full").addEventListener("click", () => send("openDashboard"));
 
 // ---------- Apollo search ----------
 const PRESETS = {
@@ -266,11 +378,11 @@ $("btn-apollo-all").addEventListener("click", () => {
 $("btn-apollo-reveal").addEventListener("click", (e) => withBusy(e.target, async () => {
   const ids = apolloPeople.filter((p) => p.picked).map((p) => p.id);
   if (!ids.length) { toast("Tick at least one person", "err"); return; }
-  const { leads } = await send("apolloReveal", { ids });
-  addFound(leads);
+  const { count } = await send("apolloReveal", { ids });
   apolloPeople = apolloPeople.filter((p) => !p.picked);
   renderApollo();
-  toast(`Got ${leads.filter((l) => l.Email).length} email${leads.length === 1 ? "" : "s"} from Apollo`);
+  toast(`Got ${count} email${count === 1 ? "" : "s"} from Apollo. They're in Captured, ready to save.`);
+  loadCaptures(true);
 }));
 
 $("btn-refresh").addEventListener("click", loadLeads);

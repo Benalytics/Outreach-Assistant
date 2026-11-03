@@ -2,7 +2,7 @@
 
 A Chrome extension for cold email outreach for a children's book illustration and book formatting service.
 
-It finds leads on Google Maps, Yelp, business websites, Apollo and Hunter. It then:
+It captures leads by hand or automatically from Google Maps, Yelp, Trustpilot, Amazon, Instagram, Threads, X, Facebook, Indeed, Glassdoor, business websites, Apollo and Hunter. It then:
 
 - checks each email,
 - saves the good ones to a Google Sheet,

@@ -7,7 +7,7 @@
 </head>
 <body>
   <header>
-    <h1>Outreach Assistant</h1>
+    <div class="row-between"><h1>Outreach Assistant</h1><button id="btn-full" class="link small" title="Open in a full browser tab">Open full page ↗</button></div>
     <nav>
       <button class="tab active" data-tab="setup">Setup</button>
       <button class="tab" data-tab="leads">Leads</button>
@@ -40,6 +40,7 @@
         <input id="hunter-key" type="password" placeholder="Paste your Hunter API key">
         <button id="btn-hunter-save" class="secondary">Save key</button>
         <label class="check small"><input id="use-hunter" type="checkbox" checked> Check every email with Hunter (1 verification credit each)</label>
+        <label class="check small"><input id="use-hunter-search" type="checkbox" checked> Ask Hunter when a website shows no email (1 search credit each)</label>
       </div>
 
       <div class="card" id="sheet-card">
@@ -58,11 +59,53 @@
     </section>
 
     <section id="tab-leads" class="panel">
+      <div class="cols">
       <div class="card">
-        <h2>From the page you have open</h2>
-        <p class="muted">Open a business on Google Maps or Yelp, or any business website, then press the button. It reads the listing, checks the business website for emails, and verifies them.</p>
-        <button id="btn-scan" class="primary">Find emails on this page</button>
-        <p id="scan-info" class="muted small" hidden></p>
+        <h2>Capture by hand</h2>
+        <p class="muted small">Open a page, then press the button. Works on Google Maps, Yelp, Trustpilot, Amazon (book, author and search pages), Instagram, Facebook, Threads, X, Indeed, Glassdoor, and any business website. On a results page it captures everything listed.</p>
+        <button id="btn-capture" class="primary">Capture this page</button>
+        <label class="check small"><input id="watch" type="checkbox"> Keep capturing while I scroll a results page</label>
+        <p id="capture-info" class="muted small" hidden></p>
+      </div>
+
+      <div class="card">
+        <h2>Automatic capture</h2>
+        <p class="muted small">Goes through search results by itself in a separate small window, at a human pace. Keep that window open (behind others is fine).</p>
+        <input id="job-keyword" placeholder="What to look for, e.g. children's book author, preschool">
+        <input id="job-place" placeholder="Where, e.g. London, United Kingdom">
+        <div class="checks">
+          <label class="check small"><input type="checkbox" name="job-src" value="maps" checked> Google Maps</label>
+          <label class="check small"><input type="checkbox" name="job-src" value="yelp"> Yelp</label>
+          <label class="check small"><input type="checkbox" name="job-src" value="trustpilot"> Trustpilot</label>
+          <label class="check small"><input type="checkbox" name="job-src" value="amazon"> Amazon books</label>
+        </div>
+        <div class="row-gap">
+          <label class="small muted grow">Stop at this many ready leads<input id="job-target" type="number" min="1" max="500" value="30"></label>
+          <label class="small muted grow">Max pages a day<input id="job-pages" type="number" min="1" max="300" value="40"></label>
+        </div>
+        <button id="btn-job-start" class="primary">Start automatic capture</button>
+        <button id="btn-job-stop" class="secondary" hidden>Stop</button>
+        <p id="job-info" class="muted small"></p>
+      </div>
+      </div>
+
+      <div class="card" id="captured-card">
+        <div class="row-between"><h2>Captured</h2><span id="cap-counts" class="muted small"></span></div>
+        <div class="filters" id="cap-filters">
+          <button class="chip active" data-f="all">All</button>
+          <button class="chip" data-f="ready">Ready</button>
+          <button class="chip" data-f="needs_website">Needs website</button>
+          <button class="chip" data-f="working">Checking</button>
+          <button class="chip" data-f="no_email">No email</button>
+          <button class="chip" data-f="saved">Saved</button>
+        </div>
+        <p class="muted small">Each capture is checked in the background: its website is searched for an email, then the email is verified. Verified and valid emails are ticked for saving.</p>
+        <ul id="cap-list" class="cap-list"></ul>
+        <button id="btn-cap-save" class="primary">Save ticked to sheet</button>
+        <div class="row-gap">
+          <button id="btn-cap-clear-saved" class="secondary">Clear saved</button>
+          <button id="btn-cap-clear-dead" class="secondary">Clear no-email</button>
+        </div>
       </div>
 
       <div class="card">
@@ -87,13 +130,6 @@
           </div>
           <p class="muted small">Getting emails uses one Apollo credit per person.</p>
         </div>
-      </div>
-
-      <div class="card" id="found-card" hidden>
-        <div class="row-between"><h2>Found emails</h2><button id="btn-found-clear" class="link small">Clear</button></div>
-        <p class="muted small">Verified and valid emails are ticked. Invalid ones are left out unless you tick them.</p>
-        <ul id="found-list" class="lead-list"></ul>
-        <button id="btn-found-save" class="primary">Save ticked to sheet</button>
       </div>
 
       <div class="card">

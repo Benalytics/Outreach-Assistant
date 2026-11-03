@@ -118,3 +118,34 @@ What Hunter adds:
 - Each one is sent as a reply in the same Gmail conversation and stays under 200 characters (links not counted). Right before sending, the tool checks Gmail again and refuses if they've answered.
 - Follow-ups go out on weekdays only and count toward your daily limit.
 - **Later** moves to the next one; **No more follow-ups** stops them for that lead.
+
+
+---
+
+# Phase 1: capture from more places, by hand or automatically (version 0.7)
+
+**Full-page dashboard.** Click **Open full page ↗** at the top of the side panel to open the same tool in its own browser tab, with more room. Both stay in sync.
+
+## Capture by hand (Leads tab)
+Open a page and press **Capture this page**. It works on:
+- **Google Maps**: a business's details, or every business in the results list
+- **Yelp**: a business page, or every business on a results page (the website is looked up for you)
+- **Trustpilot**: a company page, or every company on a search page
+- **Amazon**: a book page (the author, the book, and whether it's self-published or already has an illustrator), an author page, or book search results. Works on amazon.com, .co.uk, .de, .fr, .es, .it, .nl and others.
+- **Instagram, Threads, X and Facebook** profiles and pages: name, handle, bio, the website link in the bio, and any email shown
+- **Indeed and Glassdoor**: the company that's hiring (a job ad for an illustrator or book designer is a great lead), plus company pages and job search results
+- **Any business website**
+
+On a results page, tick **Keep capturing while I scroll** and it captures new results every few seconds as you scroll.
+
+## Automatic capture
+Type what to look for and where, tick Google Maps, Yelp, Trustpilot and/or Amazon books, and press **Start automatic capture**. A small separate window opens and goes through the result pages by itself at a human pace (a few seconds per page). It stops when it has the number of ready leads you asked for, when the pages run out, when it hits your daily page limit, or when you press Stop. If a site asks it to prove it's human, that site is skipped for the rest of the run. Social sites, Indeed and Glassdoor are manual only, to keep your accounts safe.
+
+## Captured list
+Everything you capture (and every Apollo email you reveal) lands in **Captured**. In the background the tool looks for an email on each website (and asks Hunter if the site shows none), then checks it. Each capture shows its status:
+- **Ready**: emails found and checked. Verified and Valid ones are ticked. Press **Save ticked to sheet**.
+- **Needs website**: no website or email found yet (common for Amazon authors and social profiles). Type their website or email into the box and press **Check**, or use **Search Google for them**.
+- **No email found** / **Error**: press **Try again**, or remove it.
+- Leads in **Germany or Austria** are marked "held back from sending" (stricter cold email law there). You can still save them.
+
+New columns in the sheet: **Country** and **Rating**.

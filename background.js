@@ -5,19 +5,44 @@ import { FOLLOWUP_DAYS } from "./lib/templates.js";
 import { checkInbox, summarize } from "./lib/tracker.js";
 import { searchPeople, revealEmails } from "./lib/apollo.js";
 import { verifyLeads } from "./lib/verify.js";
-import { hunterAccount, hunterDomainSearch, hunterKey } from "./lib/hunter.js";
-import { scanWebsite } from "./lib/sitescan.js";
-import { extractBusinessFromPage } from "./lib/extract.js";
-import { filterBusinessEmails, isPlatformSite } from "./lib/emailfilter.js";
+import { hunterAccount } from "./lib/hunter.js";
+import { extractPage } from "./lib/extract.js";
+import { addCaptures, addReadyLeads, allCaptures, runQueue, supplyContact, removeCaptures, clearCaptures, updateCapture } from "./lib/captures.js";
+import { startJob, stopJob, getJob, runJob, AUTO_SOURCES } from "./lib/job.js";
 
 // Clicking the toolbar icon opens the side panel.
 chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   chrome.alarms.create("check-inbox", { periodInMinutes: 10 });
+  chrome.alarms.create("queue-tick", { periodInMinutes: 1 });
+  runQueue();
 });
 chrome.runtime.onStartup.addListener(() => {
   chrome.alarms.create("check-inbox", { periodInMinutes: 10 });
+  chrome.alarms.create("queue-tick", { periodInMinutes: 1 });
+  runQueue();
+  runJob();
 });
+
+// The full-page dashboard: the same panel, opened in its own tab.
+async function openDashboard() {
+  const url = chrome.runtime.getURL("sidepanel.html?full=1");
+  const [tab] = (await chrome.tabs.query({})).filter((t) => (t.url || "").startsWith(chrome.runtime.getURL("sidepanel.html?full")));
+  if (tab) { await chrome.tabs.update(tab.id, { active: true }); await chrome.windows.update(tab.windowId, { focused: true }); }
+  else await chrome.tabs.create({ url });
+}
+
+// The page to capture from: the tab you're looking at, or the last web page you looked at
+// when you're in the full-page dashboard. Never the automatic capture window.
+async function targetTab() {
+  const job = await getJob();
+  const skip = job?.status === "running" ? job.windowId : -1;
+  const [active] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (active && /^https?:/.test(active.url || "") && active.windowId !== skip) return active;
+  const tabs = (await chrome.tabs.query({})).filter((t) => /^https?:/.test(t.url || "") && t.windowId !== skip);
+  tabs.sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
+  return tabs[0] || null;
+}
 
 // Every 10 minutes: look for replies and bounces, update the sheet, and notify you.
 async function runInboxCheck() {
@@ -46,6 +71,8 @@ async function runInboxCheck() {
 
 chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === "check-inbox") runInboxCheck().catch((e) => console.warn("Inbox check failed:", e.message));
+  if (a.name === "queue-tick") runQueue();
+  if (a.name === "job-tick") runJob();
 });
 
 chrome.notifications.onClicked.addListener((id) => {
@@ -74,8 +101,8 @@ const handlers = {
     const { userEmail, sheet } = await chrome.storage.local.get(["userEmail", "sheet"]);
     let signedIn = false;
     try { await getToken(false); signedIn = true; } catch (_) {}
-    const { apolloKey, hunterKey: hk, useHunter = true } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter"]);
-    return { signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter };
+    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch"]);
+    return { signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch };
   },
   async signIn() {
     const token = await getToken(true);
@@ -131,42 +158,53 @@ const handlers = {
     return searchPeople(filters);
   },
   async apolloReveal({ ids }) {
-    return { leads: await verifyLeads(await revealEmails(ids)) };
+    const leads = await verifyLeads(await revealEmails(ids));
+    await addReadyLeads(leads.filter((l) => l.Email), "Apollo");
+    return { count: leads.filter((l) => l.Email).length };
   },
-  // Reads the business on the open tab, checks its website for emails, and verifies them.
-  async scanActiveTab() {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tab || !/^https?:/.test(tab.url || "")) throw new Error("Open a Google Maps place, a Yelp business page, or a business website first.");
-    const [{ result: biz }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractBusinessFromPage });
-    if (biz.platform && !biz.name) {
-      if (biz.site === "Google Maps") throw new Error("Click one business in Google Maps so its details panel opens on the left, then try again.");
-      if (biz.site === "Yelp") throw new Error("Open a single business page on Yelp (its address starts with yelp.com/biz/), then try again.");
-      throw new Error("This page isn't a business. Open a business on Google Maps or Yelp, or the business's own website.");
+  // ---------- capture ----------
+  async openDashboard() { await openDashboard(); return {}; },
+  async capturePage({ quiet } = {}) {
+    const tab = await targetTab();
+    if (!tab) throw new Error("Open a web page to capture first.");
+    const [{ result }] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: extractPage });
+    if (!result || result.kind === "none" || !result.items.length) {
+      if (quiet) return { added: 0, duplicates: 0, source: result?.source || "", message: "" };
+      throw new Error(result?.message || "Nothing to capture on this page.");
     }
-    if (biz.website && isPlatformSite(biz.website)) biz.website = "";
-    const site = biz.website ? await scanWebsite(biz.website) : { emails: [], pagesChecked: 0 };
-    const { keep, dropped } = filterBusinessEmails([...(biz.pageEmails || []), ...site.emails], biz.website);
-    const emails = keep.map((k) => k.email);
-    const offDomain = new Set(keep.filter((k) => k.offDomain).map((k) => k.email));
-    const base = {
-      Name: "", Business: biz.name, Website: biz.website, Phone: biz.phone,
-      Location: biz.address, Source: biz.site, "Source URL": biz.url,
-    };
-    let candidates = emails.map((Email) => ({ ...base, Email }));
-    // Nothing on the website: ask Hunter who works at that domain (1 search credit).
-    let hunterNote = null;
-    if (!candidates.length && biz.website && await hunterKey()) {
-      try {
-        const found = await hunterDomainSearch(biz.website);
-        candidates = found.map((h) => ({ ...base, ...h, Source: `${biz.site} + Hunter` }));
-        hunterNote = found.length ? `Hunter found ${found.length}.` : "Hunter found none either.";
-      } catch (e) { hunterNote = e.message; }
-    }
-    const leads = (await verifyLeads(candidates)).map((l) => offDomain.has(l.Email)
-      ? { ...l, offDomain: true, verifyReason: `${l.verifyReason}. Different domain from the business website, check it's theirs` }
-      : l);
-    return { business: biz, pagesChecked: site.pagesChecked, websiteError: site.error || null, hunterNote, dropped, leads };
+    const r = await addCaptures(result.items, result.source);
+    runQueue();
+    return { ...r, source: result.source, kind: result.kind, message: result.message, title: tab.title };
   },
+  async captures() {
+    const all = await allCaptures();
+    const job = await getJob();
+    return { captures: Object.values(all).sort((a, b) => b.addedAt - a.addedAt), job };
+  },
+  async supplyContact({ id, website, email }) { await supplyContact(id, { website, email }); return {}; },
+  async removeCaptures({ ids }) { await removeCaptures(ids); return {}; },
+  async clearCaptures({ statuses }) { await clearCaptures(statuses); return {}; },
+  async retryCapture({ id }) { await updateCapture(id, (x) => { x.status = "new"; }); runQueue(); return {}; },
+  // Saves the ticked emails to the sheet and marks those captures as saved.
+  async saveCaptured({ picks }) {
+    const { sheet } = await chrome.storage.local.get("sheet");
+    if (!sheet) throw new Error("Connect a Google Sheet first.");
+    const all = await allCaptures();
+    const leads = [];
+    for (const { id, email } of picks) {
+      const l = all[id]?.leads.find((x) => x.Email === email);
+      if (!l) continue;
+      const { verifyReason, apolloStatus, hunterStatus, offDomain, ...clean } = l;
+      leads.push(clean);
+    }
+    const r = await appendLeads(sheet.id, leads);
+    const savedIds = new Set(picks.map((p) => p.id));
+    for (const id of savedIds) await updateCapture(id, (x) => { x.status = "saved"; x.savedAt = Date.now(); });
+    return r;
+  },
+  async jobStart(opts) { await startJob(opts); return {}; },
+  async jobStop() { await stopJob(); return {}; },
+  async setUseHunterSearch({ on }) { await chrome.storage.local.set({ useHunterSearch: !!on }); return {}; },
   async verify({ leads }) {
     return { leads: await verifyLeads(leads) };
   },
