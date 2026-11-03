@@ -177,3 +177,20 @@ New sheet columns: **Research**, **Language**, **Subject Style**, **Opener Style
 **CSV export.** **Export CSV** under the Captured list downloads everything captured, one row per email. **Export all saved leads as CSV** under Saved leads downloads your whole sheet. Both open in Excel, Google Sheets or any CRM.
 
 **Backup.** Setup, card 6: **Download backup** saves one file with your captured leads, your details, your settings and a copy of every lead in your sheet. API keys are never in it. **Restore from backup** puts the captured leads, details and settings back, on this computer or a new one. It adds to what's there and never deletes anything, and it doesn't change your Google Sheet.
+
+---
+
+# Version 0.10: book, social and job sources, web look-ups, a new look
+
+**A clearer layout.** The four tabs are now numbered steps: **1 Set up, 2 Find leads, 3 Write & send, 4 Results**. A **Next step** bar under them always says what to do next, and its button takes you there. Setup shows which of the three needed steps are done (Google account, leads sheet, your details); the optional extras (Hunter, web look-ups, Apollo, DeepL, backup) fold away. **Your details** moved from Compose to Setup. The **?** button at the top explains the whole flow and the words you'll see. Dark mode follows your computer.
+
+**Find leads.** Pick a way at the top: **This page**, **Automatic**, **Apollo** or **Type one in**. Everything you find goes to **Your leads**, which shows each lead as a card: where it came from, what was found about them, any job posts, and the emails with their check result and score. The save button shows how many are ticked.
+
+**Automatic search: new sources.** Yelp and Trustpilot are gone from automatic search (you can still capture their pages by hand). Pick from three groups:
+- **Book sites:** Amazon books, Goodreads, Kickstarter (newest Children's Books projects), and Reedsy Discovery, BookBub, Bookshop.org, Barnes & Noble, Lulu and Blurb (searched through Bing), plus Google Maps.
+- **Social media:** Instagram, Facebook, Threads, LinkedIn and X profiles, found through a Bing search for your keyword and place, so you don't have to be signed in and your accounts are never touched.
+- **Job posts:** LinkedIn Jobs, Indeed (in the right country for your place) and Reddit hiring posts on r/HungryArtists, r/IllustratorsForHire and r/starvingartists, from the last month. Type the job to look for, for example "children's book illustrator".
+
+**Web look-ups (Setup, on by default).** When a lead has no website, the tool looks for it: the Website line on their Goodreads author page, the links on a link-in-bio page (Linktree, Beacons and similar), then a web search for their name that only accepts a site that is clearly theirs. It also checks each lead for job posts they've put up for illustration, covers or formatting. Job posts show on the lead's card with links, count as "looking for an illustrator" (or "mentions formatting"), add 12 to the lead score, and are saved in the Research column as "Jobs: …". Look-ups are paced a few seconds apart and capped at 150 a day.
+
+**Apollo.** The first box is now a free text **Keyword** box: type anything. The old choices are one-click suggestions under it (Self-published authors, Publishers, Educators, Coaches), which fill in the keyword and job titles for you. The separate Keywords box was merged into it.

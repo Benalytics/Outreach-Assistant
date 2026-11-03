@@ -13,6 +13,7 @@ import { styleStats } from "./lib/learn.js";
 import { scoreLead } from "./lib/score.js";
 import { STRICT } from "./lib/country.js";
 import { translate, deeplUsage } from "./lib/deepl.js";
+import { searchesLeft, DAILY_SEARCHES } from "./lib/lookup.js";
 
 // Clicking the toolbar icon opens the side panel.
 chrome.runtime.onInstalled.addListener(() => {
@@ -105,8 +106,12 @@ const handlers = {
     const { userEmail, sheet } = await chrome.storage.local.get(["userEmail", "sheet"]);
     let signedIn = false;
     try { await getToken(false); signedIn = true; } catch (_) {}
-    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true, deeplKey, deeplFormal = true } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch", "deeplKey", "deeplFormal"]);
-    return { signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch, hasDeeplKey: !!deeplKey, deeplFormal };
+    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true, deeplKey, deeplFormal = true, useLookup = true, useJobCheck = true, profile, unread = 0 } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch", "deeplKey", "deeplFormal", "useLookup", "useJobCheck", "profile", "unread"]);
+    return {
+      signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch,
+      hasDeeplKey: !!deeplKey, deeplFormal, useLookup, useJobCheck, searchesLeft: await searchesLeft(), dailySearches: DAILY_SEARCHES,
+      hasProfile: !!(profile?.name && profile?.address), unread,
+    };
   },
   async signIn() {
     const token = await getToken(true);
@@ -209,6 +214,8 @@ const handlers = {
   async jobStart(opts) { await startJob(opts); return {}; },
   async jobStop() { await stopJob(); return {}; },
   async setUseHunterSearch({ on }) { await chrome.storage.local.set({ useHunterSearch: !!on }); return {}; },
+  async setUseLookup({ on }) { await chrome.storage.local.set({ useLookup: !!on }); return {}; },
+  async setUseJobCheck({ on }) { await chrome.storage.local.set({ useJobCheck: !!on }); return {}; },
   async verify({ leads }) {
     return { leads: await verifyLeads(leads) };
   },
@@ -310,7 +317,7 @@ const handlers = {
   // ---------- Backup ----------
   // Everything kept in this browser except API keys and sign-in, plus a copy of the sheet.
   async backup() {
-    const keep = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal", "jobDaily"];
+    const keep = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal", "useLookup", "useJobCheck", "jobDaily"];
     const local = await chrome.storage.local.get(keep);
     let sheetLeads = null;
     if (local.sheet) { try { sheetLeads = (await getLeads(local.sheet.id)).map(({ row, ...l }) => l); } catch (_) {} }
@@ -318,7 +325,7 @@ const handlers = {
   },
   async restore({ data }) {
     if (data?.app !== "Outreach Assistant" || !data.local) throw new Error("That file isn't an Outreach Assistant backup.");
-    const allowed = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal"];
+    const allowed = ["captures", "profile", "sheet", "useHunter", "useHunterSearch", "deeplFormal", "useLookup", "useJobCheck"];
     const set = {};
     for (const k of allowed) if (data.local[k] !== undefined) set[k] = data.local[k];
     const list = set.captures ? Object.values(set.captures) : [];

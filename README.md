@@ -2,8 +2,9 @@
 
 A Chrome extension for cold email outreach for a children's book illustration and book formatting service.
 
-It captures leads by hand or automatically from Google Maps, Yelp, Trustpilot, Amazon, Instagram, Threads, X, Facebook, Indeed, Glassdoor, business websites, Apollo and Hunter. It then:
+It finds leads by hand or automatically on children's book sites (Amazon, Goodreads, Kickstarter, Reedsy Discovery, BookBub, Bookshop.org, Barnes & Noble, Lulu, Blurb), social media (Instagram, Facebook, Threads, LinkedIn, X), job posts (LinkedIn Jobs, Indeed, Glassdoor, Reddit hiring posts), Google Maps, any website, Apollo and Hunter. It then:
 
+- looks up each lead's own website when it's missing, and any job posts they've put up for illustration, covers or formatting,
 - checks each email,
 - saves the good ones to a Google Sheet,
 - reads each lead's website for their books, needs and own words,

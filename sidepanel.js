@@ -5,6 +5,7 @@ import { parseResearch, SIGN_LABELS } from "./lib/research.js";
 import { STRICT } from "./lib/country.js";
 import { toCsv } from "./lib/csv.js";
 import { LEAD_COLUMNS } from "./lib/sheets.js";
+import { scoreLead } from "./lib/score.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -20,46 +21,120 @@ function send(type, payload) {
 let toastTimer;
 function toast(text, kind = "ok") {
   const el = $("toast");
-  el.textContent = text;
+  $("toast-text").textContent = text;
   el.className = kind;
+  el.querySelector("use").setAttribute("href", kind === "err" ? "#i-alert" : "#i-check");
+  el.hidden = true;
+  void el.offsetWidth; // replays the slide-in
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
+  toastTimer = setTimeout(() => { el.hidden = true; }, kind === "err" ? 7000 : 4500);
 }
+$("toast").addEventListener("click", () => { $("toast").hidden = true; });
 
 async function withBusy(button, fn) {
   button.disabled = true;
   try { await fn(); } catch (e) { toast(e.message, "err"); } finally { button.disabled = false; }
 }
 
-// Tabs
-document.querySelectorAll(".tab").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (btn.disabled) return;
-    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b === btn));
-    document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${btn.dataset.tab}`));
-    if (btn.dataset.tab === "leads") { loadLeads(); loadCaptures(true); }
-    if (btn.dataset.tab === "analytics") loadAnalytics();
-    if (btn.dataset.tab === "compose") { loadProfile(); if (!ready.length) loadReady(); }
-  });
+// ---------- steps (tabs) and the "Next step" guide ----------
+const currentTab = () => document.querySelector(".tab.active")?.dataset.tab;
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
+  if (name === "leads") { loadCaptures(true); if ($("saved-card").open) loadLeads(); }
+  if (name === "analytics") loadAnalytics();
+  if (name === "compose") { loadProfile(); if (!ready.length && !fus.length) loadReady(); }
+  window.scrollTo({ top: 0 });
+  updateGuide();
+}
+// Opens a step and points at one card in it.
+function goTo(tab, cardId) {
+  if (currentTab() !== tab) showTab(tab);
+  const c = cardId && $(cardId);
+  if (!c) return;
+  if (c.tagName === "DETAILS") c.open = true;
+  setTimeout(() => {
+    c.scrollIntoView({ behavior: "smooth", block: "start" });
+    c.classList.remove("flash");
+    void c.offsetWidth;
+    c.classList.add("flash");
+  }, 60);
+}
+document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => showTab(btn.dataset.tab)));
+document.addEventListener("click", (e) => { const g = e.target.closest("[data-goto]"); if (g) showTab(g.dataset.goto); });
+
+let st = {};            // the latest status from the background
+let guideTarget = null;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+function nextStep() {
+  if (!st.signedIn) return ["Sign in with Google, so the tool can save your leads and send email from your Gmail.", "setup", "card-google"];
+  if (!st.sheet) return ["Create your leads sheet. It takes one click.", "setup", "sheet-card"];
+  if (!st.hasProfile) return ["Add your name and mailing address. They go under every email.", "setup", "profile-card"];
+  const readyCaps = caps.filter((c) => c.status === "ready").length;
+  if (readyCaps) return [`${plural(readyCaps, "new lead")} ready. Tick the good ones and save them to your sheet.`, "leads", "captured-card"];
+  if (fus.length) return [`${plural(fus.length, "follow-up")} due. They're written for you.`, "compose", "fu-card", "fu"];
+  if (ready.length) return [`${plural(ready.length, "lead")} waiting for a first email. Your best ones come first.`, "compose", "new-card", "new"];
+  if (job?.status === "running") return ["Automatic search is running. New leads show up in Your leads as they're found.", "leads", "captured-card"];
+  if (!caps.length) return ["Find your first leads: capture the page you're on, or start an automatic search.", "leads", "methods"];
+  return ["All caught up. Find more leads, or see how your emails are doing.", "leads", "methods"];
+}
+function updateGuide() {
+  if (st.signedIn === undefined) return;
+  const [text, tab, card, view] = nextStep();
+  guideTarget = { tab, card, view };
+  $("guide").hidden = false;
+  $("guide-text").textContent = text;
+  $("guide-go").firstChild.textContent = currentTab() === tab ? "Show me" : "Go";
+}
+$("guide-go").addEventListener("click", () => {
+  if (!guideTarget) return;
+  if (guideTarget.view) setComposeView(guideTarget.view);
+  goTo(guideTarget.tab, guideTarget.card);
 });
 
+// ---------- help ----------
+$("btn-help").addEventListener("click", () => $("help").showModal());
+$("help-close").addEventListener("click", () => $("help").close());
+$("help").addEventListener("click", (e) => { if (e.target === $("help")) $("help").close(); });
+
+function pill(id, on, onText, offText, optional) {
+  $(id).textContent = on ? onText : offText;
+  $(id).className = `pill ${on ? "on" : optional ? "off" : ""}`;
+}
 function render(state) {
-  $("auth-status").textContent = state.signedIn ? `Signed in as ${state.userEmail || "your Google account"}` : "Not signed in";
+  st = state;
+  pill("pill-google", state.signedIn, "Done", "To do");
+  pill("pill-sheet", !!state.sheet, "Done", "To do");
+  pill("pill-profile", state.hasProfile, "Done", "To do");
+  pill("pill-hunter", state.hasHunterKey, "On", "Off", true);
+  pill("pill-apollo", state.hasApolloKey, "On", "Off", true);
+  pill("pill-deepl", state.hasDeeplKey, "On", "Off", true);
+  pill("pill-lookup", state.useLookup !== false || state.useJobCheck !== false, "On", "Off", true);
+  const done = [state.signedIn, !!state.sheet, state.hasProfile].filter(Boolean).length;
+  $("setup-bar").style.width = `${(done / 3) * 100}%`;
+  $("setup-progress").textContent = done === 3 ? "All set. Head to Find leads whenever you're ready." : `${done} of 3 done`;
+  document.querySelector('.tab[data-tab="setup"]').classList.toggle("done", done === 3);
+  $("pip-analytics").textContent = state.unread ? String(state.unread) : "";
+  $("profile-missing").hidden = !!state.hasProfile;
+  $("use-lookup").checked = state.useLookup !== false;
+  $("use-job-check").checked = state.useJobCheck !== false;
+  $("lookup-status").textContent = `${state.searchesLeft} of ${state.dailySearches} look-ups left today. Each lead uses up to two. They reset every day.`;
+  $("auth-status").textContent = state.signedIn ? `Signed in as ${state.userEmail || "your Google account"}` : "Not signed in yet. A Google window opens and asks you to allow access.";
   $("btn-signin").hidden = state.signedIn;
   $("btn-signout").hidden = !state.signedIn;
   $("sheet-card").style.opacity = state.signedIn ? 1 : 0.5;
   $("sheet-card").querySelectorAll("button, input").forEach((el) => { el.disabled = !state.signedIn; });
-  $("apollo-status").textContent = state.hasApolloKey ? "Apollo key saved." : "Used to find people on Apollo. It stays in this browser only.";
+  $("apollo-status").textContent = state.hasApolloKey ? "Apollo key saved. Use it under Find leads, then Apollo." : "Paste your Apollo API key. It stays in this browser only.";
   $("use-hunter").checked = state.useHunter !== false;
   $("use-hunter-search").checked = state.useHunterSearch !== false;
-  if (!state.hasHunterKey) $("hunter-status").textContent = "Checks each mailbox for real, and finds emails when a website lists none. It stays in this browser only.";
+  if (!state.hasHunterKey) { $("hunter-status").textContent = "Paste your Hunter API key. It stays in this browser only."; hunterShown = false; }
   else if (!hunterShown) { hunterShown = true; showHunterCredits(); }
   deeplOn = !!state.hasDeeplKey;
   $("btn-d-deepl").hidden = !deeplOn;
   $("btn-fu-deepl").hidden = !deeplOn;
   $("deepl-formal").value = state.deeplFormal === false ? "0" : "1";
-  if (!deeplOn) $("deepl-status").textContent = "Translates your drafts into the lead's language with better wording than the built-in versions. A free DeepL API key gives you 500,000 characters a month. It stays in this browser only.";
+  if (!deeplOn) { $("deepl-status").textContent = "Paste your DeepL API key. It stays in this browser only."; deeplShown = false; }
   else if (!deeplShown) { deeplShown = true; showDeeplUsage(); }
   $("sheet-connected").hidden = !state.sheet;
   $("sheet-setup").hidden = !!state.sheet;
@@ -67,37 +142,38 @@ function render(state) {
     $("sheet-link").textContent = state.sheet.title;
     $("sheet-link").href = state.sheet.url;
   }
+  updateGuide();
 }
 
 async function refresh() {
   try { render(await send("status")); } catch (e) { toast(e.message, "err"); }
 }
 
-$("btn-signin").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-signin").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { userEmail } = await send("signIn");
   toast(`Signed in as ${userEmail}`);
   await refresh();
 }));
 
-$("btn-signout").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-signout").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("signOut");
   await refresh();
 }));
 
-$("btn-sheet-create").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-sheet-create").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { sheet } = await send("createSheet", { title: "Outreach Leads" });
   toast(`Created "${sheet.title}"`);
   await refresh();
 }));
 
-$("btn-sheet-connect").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-sheet-connect").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { sheet } = await send("connectSheet", { input: $("sheet-input").value });
   $("sheet-input").value = "";
   toast(`Connected to "${sheet.title}"`);
   await refresh();
 }));
 
-$("btn-sheet-disconnect").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-sheet-disconnect").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("disconnectSheet");
   await refresh();
 }));
@@ -111,13 +187,13 @@ $("lead-form").addEventListener("submit", (e) => {
     const { leads: [checked] } = await send("verify", { leads: [lead] });
     if (checked.Verification === "Invalid") { toast(`Not saved: ${checked.verifyReason}`, "err"); return; }
     const { added } = await send("addLeads", { leads: [clean(checked)] });
-    if (added) { toast(`Saved (${checked.Verification}: ${checked.verifyReason})`); form.reset(); loadLeads(); }
+    if (added) { toast(`Saved to your sheet (${checked.Verification}: ${checked.verifyReason})`); form.reset(); if ($("saved-card").open) loadLeads(); loadReady(); }
     else toast("That email is already in your sheet", "err");
   });
 });
 
 // ---------- Apollo key ----------
-$("btn-apollo-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-apollo-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("saveApolloKey", { key: $("apollo-key").value });
   $("apollo-key").value = "";
   toast("Apollo key saved");
@@ -136,7 +212,7 @@ async function showHunterCredits() {
   try { $("hunter-status").textContent = creditText((await send("hunterCredits")).account); }
   catch (e) { $("hunter-status").textContent = `Hunter key saved, but: ${e.message}`; }
 }
-$("btn-hunter-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-hunter-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const key = $("hunter-key").value;
   const r = await send("saveHunterKey", { key });
   $("hunter-key").value = "";
@@ -147,6 +223,8 @@ $("btn-hunter-save").addEventListener("click", (e) => withBusy(e.target, async (
 }));
 $("use-hunter").addEventListener("change", (e) => send("setUseHunter", { on: e.target.checked }));
 $("use-hunter-search").addEventListener("change", (e) => send("setUseHunterSearch", { on: e.target.checked }));
+$("use-lookup").addEventListener("change", async (e) => { await send("setUseLookup", { on: e.target.checked }); refresh(); });
+$("use-job-check").addEventListener("change", async (e) => { await send("setUseJobCheck", { on: e.target.checked }); refresh(); });
 
 // ---------- DeepL key ----------
 let deeplOn = false;
@@ -156,7 +234,7 @@ async function showDeeplUsage() {
   try { $("deepl-status").textContent = usageText((await send("deeplUsage")).usage); }
   catch (e) { $("deepl-status").textContent = `DeepL key saved, but: ${e.message}`; }
 }
-$("btn-deepl-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-deepl-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const r = await send("saveDeeplKey", { key: $("deepl-key").value });
   $("deepl-key").value = "";
   if (r.usage) { $("deepl-status").textContent = usageText(r.usage); toast("DeepL key saved and working"); }
@@ -171,7 +249,7 @@ const clean = (l) => { const { verifyReason, apolloStatus, hunterStatus, picked,
 let caps = [];
 let capFilter = "all";
 const picks = new Map(); // "id|email" -> ticked
-const STATUS_TEXT = { new: "Waiting", checking: "Checking…", ready: "Ready", needs_website: "Needs website", no_email: "No email found", saved: "Saved", error: "Error" };
+const STATUS_TEXT = { new: "Waiting", checking: "Checking", ready: "Ready", needs_website: "Needs website", no_email: "No email found", saved: "Saved", error: "Problem" };
 const goodEmail = (l) => !l.offDomain && (l.Verification === "Verified" || l.Verification === "Valid");
 const isPicked = (c, l) => { const k = `${c.id}|${l.Email}`; return picks.has(k) ? picks.get(k) : goodEmail(l); };
 
@@ -189,37 +267,98 @@ function researchLine(r) {
     r.titles?.length ? `📚 ${r.titles.join(", ")}` : "",
     [...(r.genres || []), r.ages].filter(Boolean).join(", "),
     (r.signs || []).map((k) => SIGN_LABELS[k]).join(", "),
+    r.jobs?.length ? `💼 ${r.jobs.map((j) => j.title).join(", ")}` : "",
     r.quote ? `“${r.quote}”` : "",
   ].filter(Boolean).join(" · ");
+}
+
+// Initials in a coloured circle, the colour fixed per name.
+function avatar(name, cls = "avatar") {
+  const a = el("div", cls);
+  const words = String(name || "?").replace(/^u\//, "").replace(/[^\p{L}\p{N} ]/gu, " ").trim().split(/\s+/);
+  a.textContent = ((words[0]?.[0] || "?") + (words.length > 1 ? words[words.length - 1][0] : "")).toUpperCase();
+  let h = 0;
+  for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  a.style.setProperty("--h", h);
+  return a;
+}
+const scoreClass = (n) => (n >= 60 ? "hi" : n >= 35 ? "mid" : "lo");
+const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch (_) { return ""; } };
+
+function tickedCount() {
+  let n = 0;
+  for (const c of caps) if (c.status === "ready") for (const l of c.leads || []) if (isPicked(c, l)) n++;
+  return n;
+}
+function updateSaveButton() {
+  const n = tickedCount();
+  $("btn-cap-save").lastChild.textContent = n ? `Save ${n} ticked to my sheet` : "Save ticked to my sheet";
+  $("btn-cap-save").disabled = !n;
 }
 
 let lastSig = "";
 function renderCaptures(force) {
   const list = $("cap-list");
   if (!force && list.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
-  const shown = caps.filter((c) => capFilter === "all" || (capFilter === "working" ? ["new", "checking"].includes(c.status) : c.status === capFilter));
+  const inFilter = (c, f) => f === "all" || (f === "working" ? ["new", "checking"].includes(c.status) : f === "no_email" ? ["no_email", "error"].includes(c.status) : c.status === f);
+  const shown = caps.filter((c) => inFilter(c, capFilter));
   const top = (c) => Math.max(0, ...(c.leads || []).map((l) => Number(l.Score) || 0));
   if (capFilter === "ready") shown.sort((a, b) => top(b) - top(a)); // best leads first
-  const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.leads?.length, c.website, !!c.research]));
+  const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.step, c.leads?.length, c.website, !!c.research, c.jobs?.length]));
+  const readyN = caps.filter((c) => c.status === "ready").length;
+  $("pip-leads").textContent = readyN ? String(readyN) : "";
+  updateGuide();
   if (!force && sig === lastSig) return;
   lastSig = sig;
-  const count = (st) => caps.filter((c) => st.includes(c.status)).length;
-  $("cap-counts").textContent = caps.length ? `${count(["ready"])} ready · ${count(["new", "checking"])} checking · ${count(["needs_website"])} need a website` : "";
+  document.querySelectorAll("#cap-filters .chip").forEach((b) => {
+    const n = caps.filter((c) => inFilter(c, b.dataset.f)).length;
+    b.querySelector("b").textContent = n ? String(n) : "";
+  });
+  const count = (sts) => caps.filter((c) => sts.includes(c.status)).length;
+  $("cap-counts").textContent = caps.length
+    ? [`${count(["ready"])} ready to save`, count(["new", "checking"]) && `${count(["new", "checking"])} being checked`, count(["needs_website"]) && `${count(["needs_website"])} need a website`].filter(Boolean).join(" · ")
+    : "Each one is checked for you: we find their website and email, check the email works, and look for job posts.";
   list.replaceChildren();
-  if (!shown.length) { list.append(el("li", "muted small", caps.length ? "Nothing here." : "Nothing captured yet. Capture a page, start automatic capture, or search Apollo.")); return; }
+  if (!shown.length) {
+    const li = el("li", "cap-empty");
+    li.innerHTML = '<svg class="i"><use href="#i-inbox"/></svg>';
+    li.append(el("div", "", caps.length ? "Nothing in this list right now." : "No leads yet. Capture a page, start an automatic search, or search Apollo, and they'll show up here."));
+    list.append(li);
+    updateSaveButton();
+    return;
+  }
   for (const c of shown.slice(0, 300)) {
-    const li = el("li");
-    const head = el("div", "cap-head");
-    const title = el("div", "cap-name", c.business || c.name || c.website || "(no name)");
-    if (c.strict) title.append(el("span", "flag", `${c.country}: held back from sending`));
-    head.append(title, el("span", `status ${c.status}`, STATUS_TEXT[c.status] || c.status));
-    li.append(head);
-    const metaBits = [c.business && c.name ? c.name : "", c.source, c.country, c.handle, c.rating && `★ ${c.rating}${c.reviews ? ` (${c.reviews})` : ""}`, c.website && new URL(c.website).hostname.replace(/^www\./, "")].filter(Boolean);
-    li.append(el("div", "cap-meta", metaBits.join(" · ")));
-    if (c.note) li.append(el("div", "cap-meta", c.note));
-    const rs = researchLine(c.research);
-    if (rs || (c.lang && c.lang !== "en")) li.append(el("div", "cap-research", [rs, c.lang && c.lang !== "en" ? `Writes in ${LANGS[c.lang]}` : ""].filter(Boolean).join(" · ")));
-    if (c.error) li.append(el("div", "cap-meta", c.error));
+    const who = c.business || c.name || host(c.website) || "(no name)";
+    const li = el("li", `cap${c.status === "ready" ? " is-ready" : ""}${c.jobs?.length ? " is-job" : ""}`);
+    const topRow = el("div", "cap-top");
+    const body = el("div", "grow");
+    const title = el("div", "cap-name", who);
+    if (c.strict) title.append(el("span", "flag", `${c.country}: held back`));
+    const meta = el("div", "cap-meta");
+    meta.append(el("span", "src", c.source));
+    meta.append([c.business && c.name ? c.name : "", c.country, c.handle && c.handle !== c.name ? c.handle : "", c.rating && `★ ${c.rating}${c.reviews ? ` (${c.reviews})` : ""}`, host(c.website)].filter(Boolean).join(" · "));
+    body.append(title, meta);
+    topRow.append(avatar(c.name || who), body, el("span", `status ${c.status}`, c.status === "checking" && c.step ? "Checking" : STATUS_TEXT[c.status] || c.status));
+    li.append(topRow);
+    if (c.note && !/^(Hiring|Reddit post):/.test(c.note)) li.append(el("div", "cap-meta", c.note));
+    const rs = researchLine({ ...c.research, jobs: [] });
+    const extra = [c.lookupVia && c.lookupVia !== "you" && c.website ? `🔎 Website found through ${c.lookupVia}` : "", c.lang && c.lang !== "en" ? `Writes in ${LANGS[c.lang]}` : ""].filter(Boolean).join(" · ");
+    if (rs || extra) li.append(el("div", "cap-research", [rs, extra].filter(Boolean).join(" · ")));
+    if (c.jobs?.length) {
+      const box = el("div", "cap-jobs");
+      box.append(el("strong", "", `💼 ${c.jobs.length === 1 ? "Job post" : `${c.jobs.length} job posts`}`));
+      for (const j of c.jobs) {
+        const a = el("a", "", `${j.title}${j.site ? ` · ${j.site}` : ""}`);
+        a.href = j.url || "#";
+        a.target = "_blank";
+        a.title = j.title;
+        box.append(a);
+      }
+      li.append(box);
+    }
+    if (c.status === "checking" && c.step) li.append(el("div", "cap-step", c.step));
+    if (c.hint) li.append(el("div", "cap-hint", c.hint));
+    if (c.error) li.append(el("div", "cap-hint", c.error));
 
     if (c.status === "ready" && c.leads?.length) {
       const ul = el("ul", "cap-emails");
@@ -228,14 +367,13 @@ function renderCaptures(force) {
         const box = el("input");
         box.type = "checkbox";
         box.checked = isPicked(c, l);
-        box.addEventListener("change", () => picks.set(`${c.id}|${l.Email}`, box.checked));
-        const body = el("div");
+        box.addEventListener("change", () => { picks.set(`${c.id}|${l.Email}`, box.checked); updateSaveButton(); });
+        const lb = el("div", "grow");
         const line = el("div", "email", l.Email);
-        const badge = el("span", `badge ${l.Verification}`, l.Verification);
-        line.append(badge);
-        if (l.Score) { const sc = el("span", `score ${Number(l.Score) >= 60 ? "hi" : Number(l.Score) >= 35 ? "mid" : "lo"}`, l.Score); sc.title = `Lead score ${l.Score}/100: ${l.scoreWhy || ""}`; line.append(sc); }
-        body.append(line, el("div", "meta", [l.Name !== c.name ? l.Name : "", l.verifyReason].filter(Boolean).join(" · ")));
-        row.append(box, body);
+        line.append(el("span", `badge ${l.Verification}`, l.Verification));
+        if (l.Score) { const sc = el("span", `score ${scoreClass(Number(l.Score))}`, l.Score); sc.title = `Lead score ${l.Score}/100: ${l.scoreWhy || ""}`; line.append(sc); }
+        lb.append(line, el("div", "meta", [l.Name !== c.name ? l.Name : "", l.verifyReason].filter(Boolean).join(" · ")));
+        row.append(box, lb);
         ul.append(row);
       }
       li.append(ul);
@@ -243,8 +381,8 @@ function renderCaptures(force) {
     if (c.status === "needs_website" || c.status === "no_email") {
       const fix = el("div", "cap-fix");
       const inp = el("input");
-      inp.placeholder = c.status === "needs_website" ? "Their website or email" : "Another website, or an email you found";
-      const go = el("button", "secondary", "Check");
+      inp.placeholder = c.status === "needs_website" ? "Type their website or email" : "Another website, or an email you found";
+      const go = el("button", "btn btn-secondary", "Check");
       go.addEventListener("click", () => withBusy(go, async () => {
         const v = inp.value.trim();
         if (!v) throw new Error("Type a website or an email first.");
@@ -256,40 +394,46 @@ function renderCaptures(force) {
       li.append(fix);
     }
     const acts = el("div", "cap-actions");
-    if (c.profileUrl) { const a = el("a", "small", "Open source"); a.href = c.profileUrl; a.target = "_blank"; acts.append(a); }
+    if (c.profileUrl) { const a = el("a", "", "Open where it was found"); a.href = c.profileUrl; a.target = "_blank"; acts.append(a); }
     if (c.status === "needs_website" || c.status === "no_email") {
-      const a = el("a", "small", "Search Google for them");
-      a.href = `https://www.google.com/search?q=${encodeURIComponent([c.name || c.business, c.note?.replace(/^Book: /, "").split(" · ")[0], c.name ? "author website" : "contact email"].filter(Boolean).join(" "))}`;
+      const a = el("a", "", "Search the web for them");
+      a.href = `https://www.google.com/search?q=${encodeURIComponent([c.name && !/^u\//.test(c.name) ? c.name : c.business, c.note?.replace(/^(Book|Kickstarter project|Hiring|Reddit post): /, "").split(" · ")[0], c.name ? "author website" : "contact email"].filter(Boolean).join(" "))}`;
       a.target = "_blank";
       acts.append(a);
     }
-    if (c.status === "error" || c.status === "no_email") { const b = el("button", "link small", "Try again"); b.addEventListener("click", async () => { await send("retryCapture", { id: c.id }); loadCaptures(true); }); acts.append(b); }
-    const rm = el("button", "link small", "Remove");
+    if (c.status === "error" || c.status === "no_email") { const b = el("button", "link", "Try again"); b.addEventListener("click", async () => { await send("retryCapture", { id: c.id }); loadCaptures(true); }); acts.append(b); }
+    const rm = el("button", "link rm", "Remove");
     rm.addEventListener("click", async () => { await send("removeCaptures", { ids: [c.id] }); loadCaptures(true); });
     acts.append(rm);
     li.append(acts);
     list.append(li);
   }
+  updateSaveButton();
 }
 
 let job = null;
 function renderJob() {
   const running = job?.status === "running";
   $("btn-job-start").hidden = running;
-  $("btn-job-stop").hidden = !running;
-  if (!job) { $("job-info").textContent = ""; return; }
-  $("job-info").textContent = running
-    ? `${job.message || "Working…"} Captured ${job.captured}, ${job.ready} of ${job.target} ready. Page ${Math.min(job.idx + 1, job.tasks.length)} of ${job.tasks.length}.`
-    : job.message || "";
+  $("job-live").hidden = !running;
+  $("job-done").hidden = running || !job?.message;
+  if (!job) return;
+  if (running) {
+    $("job-info").textContent = job.message || "Working…";
+    $("job-count").textContent = `${job.ready} of ${job.target} ready · ${job.captured} found`;
+    $("job-bar").style.width = `${Math.min(100, Math.round((job.ready / Math.max(1, job.target)) * 100))}%`;
+  } else $("job-done").textContent = job.message;
 }
 
 async function loadCaptures(force) {
   try {
     const r = await send("captures");
     caps = r.captures;
+    const wasRunning = job?.status === "running";
     job = r.job;
     renderCaptures(force);
     renderJob();
+    if (wasRunning && job?.status !== "running") refresh();
   } catch (e) { /* panel may be closing */ }
 }
 
@@ -301,17 +445,37 @@ $("cap-filters").addEventListener("click", (e) => {
   renderCaptures(true);
 });
 
-$("btn-cap-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-cap-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const chosen = [];
   for (const c of caps) if (c.status === "ready") for (const l of c.leads) if (isPicked(c, l)) chosen.push({ id: c.id, email: l.Email });
   if (!chosen.length) throw new Error("Nothing ticked to save yet.");
   const { added, skipped } = await send("saveCaptured", { picks: chosen });
-  toast(`Saved ${added} lead${added === 1 ? "" : "s"} to your sheet${skipped ? `, ${skipped} already there` : ""}`);
+  toast(`Saved ${added} lead${added === 1 ? "" : "s"} to your sheet${skipped ? `, ${skipped} already there` : ""}. Next: Write & send.`);
   await loadCaptures(true);
-  loadLeads();
+  if ($("saved-card").open) loadLeads();
+  loadReady();
 }));
 $("btn-cap-clear-saved").addEventListener("click", async () => { await send("clearCaptures", { statuses: ["saved"] }); loadCaptures(true); });
 $("btn-cap-clear-dead").addEventListener("click", async () => { await send("clearCaptures", { statuses: ["no_email", "error"] }); loadCaptures(true); });
+
+// ---------- ways to find leads ----------
+const METHODS = ["capture", "auto", "apollo", "manual"];
+function setMethod(m) {
+  if (!METHODS.includes(m)) m = "capture";
+  document.querySelectorAll(".method").forEach((b) => b.classList.toggle("active", b.dataset.m === m));
+  for (const k of METHODS) $(`m-${k}`).hidden = k !== m;
+  try { localStorage.setItem("method", m); } catch (_) {}
+}
+document.querySelectorAll(".method").forEach((b) => b.addEventListener("click", () => setMethod(b.dataset.m)));
+try { setMethod(localStorage.getItem("method") || "capture"); } catch (_) { setMethod("capture"); }
+
+// Suggestion chips fill the box they belong to.
+document.querySelectorAll(".ideas[data-for]").forEach((box) => box.addEventListener("click", (e) => {
+  const b = e.target.closest(".idea");
+  if (!b) return;
+  $(box.dataset.for).value = b.textContent;
+  $(box.dataset.for).focus();
+}));
 
 // ---------- Capture by hand ----------
 async function capture(quiet) {
@@ -320,11 +484,11 @@ async function capture(quiet) {
   const info = $("capture-info");
   info.hidden = false;
   info.textContent = r.added || r.duplicates
-    ? `${r.source}: captured ${r.added} new${r.duplicates ? `, ${r.duplicates} already captured` : ""}. ${r.message || ""}`
+    ? `${r.source}: captured ${r.added} new${r.duplicates ? `, ${r.duplicates} already captured` : ""}. ${r.message || ""} They're in Your leads below.`
     : r.message || "Nothing new on this page.";
   await loadCaptures(true);
 }
-$("btn-capture").addEventListener("click", (e) => withBusy(e.target, () => capture(false)));
+$("btn-capture").addEventListener("click", (e) => withBusy(e.currentTarget, () => capture(false)));
 let watchTimer = null;
 $("watch").addEventListener("change", (e) => {
   clearInterval(watchTimer);
@@ -335,58 +499,79 @@ $("watch").addEventListener("change", (e) => {
 });
 
 // ---------- Automatic capture ----------
-$("btn-job-start").addEventListener("click", (e) => withBusy(e.target, async () => {
+const JOB_SOURCES = ["linkedinjobs", "indeed", "reddit"];
+function syncSources() {
+  const on = (v) => document.querySelector(`input[name="job-src"][value="${v}"]`)?.checked;
+  $("job-words-field").hidden = !JOB_SOURCES.some(on);
+  document.querySelectorAll(".src-group").forEach((g) => {
+    const boxes = [...g.querySelectorAll('input[name="job-src"]')];
+    g.querySelector(".src-all").textContent = boxes.every((b) => b.checked) ? "None" : "All";
+  });
+}
+document.querySelectorAll('input[name="job-src"]').forEach((x) => x.addEventListener("change", syncSources));
+document.querySelectorAll(".src-all").forEach((b) => b.addEventListener("click", () => {
+  const boxes = [...b.closest(".src-group").querySelectorAll('input[name="job-src"]')];
+  const all = boxes.every((x) => x.checked);
+  boxes.forEach((x) => { x.checked = !all; });
+  syncSources();
+}));
+$("btn-job-start").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const sources = [...document.querySelectorAll('input[name="job-src"]:checked')].map((x) => x.value);
   await send("jobStart", {
-    keyword: $("job-keyword").value, place: $("job-place").value, sources,
+    keyword: $("job-keyword").value, place: $("job-place").value, sources, jobWords: $("job-words").value,
     target: Number($("job-target").value), pagesPerDay: Number($("job-pages").value),
   });
-  try { localStorage.setItem("jobForm", JSON.stringify({ k: $("job-keyword").value, p: $("job-place").value, s: sources, t: $("job-target").value, n: $("job-pages").value })); } catch (_) {}
-  toast("Automatic capture started in a small separate window");
+  try { localStorage.setItem("jobForm", JSON.stringify({ k: $("job-keyword").value, p: $("job-place").value, s: sources, w: $("job-words").value, t: $("job-target").value, n: $("job-pages").value })); } catch (_) {}
+  toast("Automatic search started in a small separate window. Leave it open.");
   await loadCaptures(true);
 }));
-$("btn-job-stop").addEventListener("click", (e) => withBusy(e.target, async () => { await send("jobStop"); await loadCaptures(true); }));
+$("btn-job-stop").addEventListener("click", (e) => withBusy(e.currentTarget, async () => { await send("jobStop"); await loadCaptures(true); }));
 try {
   const f = JSON.parse(localStorage.getItem("jobForm") || "null");
   if (f) {
-    $("job-keyword").value = f.k || ""; $("job-place").value = f.p || ""; $("job-target").value = f.t || 30; $("job-pages").value = f.n || 40;
-    document.querySelectorAll('input[name="job-src"]').forEach((x) => { x.checked = (f.s || []).includes(x.value); });
+    $("job-keyword").value = f.k || ""; $("job-place").value = f.p || ""; $("job-target").value = f.t || 30; $("job-pages").value = f.n || 40; $("job-words").value = f.w || "";
+    const known = new Set([...document.querySelectorAll('input[name="job-src"]')].map((x) => x.value));
+    const saved = (f.s || []).filter((v) => known.has(v)); // Yelp and Trustpilot are no longer here
+    if (saved.length) document.querySelectorAll('input[name="job-src"]').forEach((x) => { x.checked = saved.includes(x.value); });
   }
 } catch (_) {}
+syncSources();
 
-setInterval(() => { if (!document.hidden && $("tab-leads").classList.contains("active")) loadCaptures(false); }, 3000);
+// Your leads refresh every few seconds while you're on Find leads, and now and then otherwise (for the counts).
+let tick = 0;
+setInterval(() => {
+  tick++;
+  if (document.hidden) return;
+  if (currentTab() === "leads" || tick % 5 === 0) loadCaptures(false);
+}, 3000);
 
 // ---------- Full page ----------
 if (new URLSearchParams(location.search).get("full")) document.body.classList.add("full");
 $("btn-full").addEventListener("click", () => send("openDashboard"));
 
 // ---------- Apollo search ----------
-const PRESETS = {
-  authors: { titles: "Author, Children's Book Author, Writer, Self-Published Author", keywords: "children's book" },
-  publishers: { titles: "Publisher, Editor, Acquisitions Editor, Managing Editor, Founder", keywords: "children's publishing" },
-  educators: { titles: "Curriculum Director, Founder, Content Director, Head of Content", keywords: "early learning" },
-  coaches: { titles: "Coach, Founder, Course Creator", keywords: "online course" },
-};
-$("apollo-preset").addEventListener("change", (e) => {
-  const p = PRESETS[e.target.value];
-  if (!p) return;
-  $("apollo-titles").value = p.titles;
-  $("apollo-keywords").value = p.keywords;
+// The keyword box is free text. The suggestions under it fill in a keyword and job titles to start from.
+$("apollo-ideas").addEventListener("click", (e) => {
+  const b = e.target.closest(".idea");
+  if (!b) return;
+  $("apollo-q").value = b.dataset.q;
+  $("apollo-titles").value = b.dataset.t;
 });
+$("apollo-q").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-apollo-search").click(); });
 
 let apolloPage = 1;
 let apolloPeople = [];
 
 async function runApolloSearch(page) {
   const r = await send("apolloSearch", {
-    titles: $("apollo-titles").value, keywords: $("apollo-keywords").value,
+    titles: $("apollo-titles").value, keywords: $("apollo-q").value,
     locations: $("apollo-locations").value, page,
   });
   apolloPage = page;
   if (page === 1) apolloPeople = [];
   apolloPeople.push(...r.people.map((p) => ({ ...p, picked: false })));
   $("apollo-results").hidden = false;
-  $("apollo-count").textContent = `${r.total ?? "?"} people match. Showing ${apolloPeople.length}.`;
+  $("apollo-count").textContent = `${r.total ?? "?"} people match. Showing ${apolloPeople.length}. Tick the ones you want.`;
   renderApollo();
 }
 
@@ -414,24 +599,28 @@ function renderApollo() {
   });
 }
 
-$("btn-apollo-search").addEventListener("click", (e) => withBusy(e.target, () => runApolloSearch(1)));
-$("btn-apollo-more").addEventListener("click", (e) => withBusy(e.target, () => runApolloSearch(apolloPage + 1)));
+$("btn-apollo-search").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  if (!$("apollo-q").value.trim() && !$("apollo-titles").value.trim()) throw new Error("Type a keyword or a job title to search for.");
+  await runApolloSearch(1);
+}));
+$("btn-apollo-more").addEventListener("click", (e) => withBusy(e.currentTarget, () => runApolloSearch(apolloPage + 1)));
 $("btn-apollo-all").addEventListener("click", () => {
   const all = apolloPeople.every((p) => p.picked || !p.hasEmail);
   apolloPeople.forEach((p) => { if (p.hasEmail) p.picked = !all; });
   renderApollo();
 });
-$("btn-apollo-reveal").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-apollo-reveal").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const ids = apolloPeople.filter((p) => p.picked).map((p) => p.id);
   if (!ids.length) { toast("Tick at least one person", "err"); return; }
   const { count } = await send("apolloReveal", { ids });
   apolloPeople = apolloPeople.filter((p) => !p.picked);
   renderApollo();
-  toast(`Got ${count} email${count === 1 ? "" : "s"} from Apollo. They're in Captured, ready to save.`);
+  toast(`Got ${count} email${count === 1 ? "" : "s"} from Apollo. They're in Your leads, ready to save.`);
   loadCaptures(true);
 }));
 
 $("btn-refresh").addEventListener("click", loadLeads);
+$("saved-card").addEventListener("toggle", () => { if ($("saved-card").open) loadLeads(); });
 
 // ---------- CSV export and backup ----------
 function download(name, text, type) {
@@ -459,14 +648,14 @@ $("btn-cap-csv").addEventListener("click", () => {
   toast(`Exported ${rows.length} row${rows.length === 1 ? "" : "s"}`);
 });
 
-$("btn-leads-csv").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-leads-csv").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { leads } = await send("listLeads");
   if (!leads.length) throw new Error("Your sheet has no leads yet.");
   download(`saved-leads-${stamp()}.csv`, toCsv(leads, LEAD_COLUMNS), "text/csv;charset=utf-8");
   toast(`Exported ${leads.length} lead${leads.length === 1 ? "" : "s"}`);
 }));
 
-$("btn-backup").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-backup").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { data } = await send("backup");
   try { data.jobForm = JSON.parse(localStorage.getItem("jobForm") || "null"); } catch (_) {}
   download(`outreach-assistant-backup-${stamp()}.json`, JSON.stringify(data, null, 1), "application/json");
@@ -515,7 +704,6 @@ async function loadLeads() {
   }
 }
 
-refresh();
 
 // ---------- Compose ----------
 let profile = {};
@@ -553,34 +741,59 @@ async function loadProfile() {
   $("pf-limit").value = profile.dailyLimit;
   $("pf-samples").value = profile.samples || "";
   $("pf-reviews").value = profile.reviews || "";
-  $("profile-card").open = !profile.name || !profile.address;
   if (ready[idx]) showDraft(false);
   if (fus[fuIdx]) showFollowUp(false);
 }
 
-$("btn-profile-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-profile-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   profile = {
     name: $("pf-name").value.trim(), portfolio: $("pf-portfolio").value.trim(),
     address: $("pf-address").value.trim(), dailyLimit: Number($("pf-limit").value) || 30,
     samples: $("pf-samples").value.trim(), reviews: $("pf-reviews").value.trim(),
   };
+  if (!profile.name || !profile.address) throw new Error("Add at least your name and your mailing address.");
   await send("saveProfile", { profile });
   if (ready[idx]) $("d-footer").textContent = footer(profile, ready[idx], $("d-lang").value).trim();
-  $("profile-card").open = false;
   toast("Details saved");
+  await refresh();
 }));
 
+// ---------- new emails / follow-ups switch (side panel shows one at a time) ----------
+function setComposeView(v) {
+  document.querySelectorAll("#compose-switch button").forEach((b) => b.classList.toggle("active", b.dataset.c === v));
+  $("new-card").hidden = v !== "new";
+  $("fu-card").hidden = v !== "fu";
+}
+document.querySelectorAll("#compose-switch button").forEach((b) => b.addEventListener("click", () => setComposeView(b.dataset.c)));
+$("btn-goto-profile").addEventListener("click", () => goTo("setup", "profile-card"));
+
+let sentToday = 0;
+function updateCounts() {
+  $("cnt-ready").textContent = ready.length ? String(ready.length) : "";
+  $("cnt-fu").textContent = fus.length ? String(fus.length) : "";
+  const n = ready.length + fus.length;
+  $("pip-compose").textContent = n ? String(n) : "";
+  const limit = Number(profile.dailyLimit) || 30;
+  $("sent-bar").style.width = `${Math.min(100, (sentToday / limit) * 100)}%`;
+  $("sent-text").textContent = `Sent today: ${sentToday} of your ${limit} a day`;
+  $("ready-info").textContent = ready.length
+    ? `Lead ${idx + 1} of ${ready.length} · best first`
+    : "No leads waiting for a first email.";
+  updateGuide();
+}
+
+let readyLoaded = false;
 async function loadReady() {
   try {
     const r = await send("readyLeads");
     ready = r.ready;
     stats = r.stats;
+    sentToday = r.sentToday;
     idx = 0;
+    readyLoaded = true;
     setFollowUps(r);
-    $("ready-info").textContent = ready.length
-      ? `${ready.length} lead${ready.length === 1 ? "" : "s"} waiting. Sent today: ${r.sentToday}.`
-      : `No verified leads waiting. Sent today: ${r.sentToday}.`;
     showDraft(true);
+    if (!ready.length && fus.length) setComposeView("fu");
   } catch (e) {
     $("ready-info").textContent = e.message;
     $("draft").hidden = true;
@@ -589,8 +802,10 @@ async function loadReady() {
 
 function updateCount() {
   const n = $("d-body").value.length;
-  $("d-count").textContent = `(${n}/${BODY_LIMIT})`;
+  $("d-count").textContent = `${n} / ${BODY_LIMIT} characters`;
   $("d-count").className = n > BODY_LIMIT ? "over" : "";
+  $("d-meter").style.width = `${Math.min(100, (n / BODY_LIMIT) * 100)}%`;
+  $("d-meter").className = n > BODY_LIMIT ? "over" : "";
 }
 
 // Picks the subject and opener styles: the first draft leans on what's getting replies,
@@ -606,6 +821,8 @@ function styleCombos(lead) {
 function showDraft(fresh) {
   const lead = ready[idx];
   $("draft").hidden = !lead;
+  $("draft-empty").hidden = !!lead || !readyLoaded;
+  updateCounts();
   if (!lead) return;
   if (fresh) {
     version = 0;
@@ -618,13 +835,22 @@ function showDraft(fresh) {
   const [subjectStyle, openerStyle] = combos[version % combos.length];
   const lang = $("d-lang").value;
   draft = makeDraft(lead, { segment: $("d-segment").value, lang, subjectStyle, openerStyle });
+  const name = lead.Name || lead.Business || lead.Email;
+  $("d-avatar").replaceWith(Object.assign(avatar(name, "avatar lg"), { id: "d-avatar" }));
+  $("d-name").textContent = name;
   $("d-to").textContent = lead.Email;
-  $("d-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}${lead.Country ? `, ${lead.Country}` : ""}) · score ${lead.Score || "?"} · ${idx + 1} of ${ready.length}, best first`;
+  $("d-who").textContent = [lead.Name && lead.Business ? lead.Business : "", lead.Country, lead.Source, lead.Verification].filter(Boolean).join(" · ");
+  const sc = Number(lead.Score) || scoreLead(lead).score;
+  const ring = $("d-score");
+  ring.textContent = String(sc);
+  ring.style.setProperty("--p", sc);
+  ring.style.setProperty("--c", sc >= 60 ? "var(--ok)" : sc >= 35 ? "var(--warn)" : "var(--muted)");
+  ring.title = `Lead score ${sc}/100: ${scoreLead(lead).reasons.join(", ")}`;
   $("d-subject").value = draft.subject;
   $("d-body").value = draft.body;
   const r = researchLine(parseResearch(lead.Research));
   $("d-research").hidden = !r;
-  $("d-research").textContent = r ? `From their website: ${r}` : "";
+  $("d-research").textContent = r ? `What we found: ${r}` : "";
   const strict = STRICT.has(lead.Country);
   $("d-strict").hidden = !strict;
   $("d-strict-text").textContent = strict ? `${lead.Country} has strict rules on cold email to businesses: it's generally only allowed with their prior consent. This lead is held back unless you tick Send anyway.` : "";
@@ -637,7 +863,7 @@ function showDraft(fresh) {
 $("d-body").addEventListener("input", updateCount);
 $("d-segment").addEventListener("change", () => showDraft(false));
 $("d-lang").addEventListener("change", () => showDraft(false));
-$("btn-d-deepl").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-d-deepl").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const lead = ready[idx];
   const lang = $("d-lang").value;
   if (lang === "en") throw new Error("Pick the language to translate into first.");
@@ -657,17 +883,16 @@ $("btn-ready-load").addEventListener("click", loadReady);
 function nextLead() {
   ready.splice(idx, 1);
   if (idx >= ready.length) idx = 0;
-  $("ready-info").textContent = `${ready.length} lead${ready.length === 1 ? "" : "s"} waiting.`;
   showDraft(true);
 }
 
-$("btn-d-skip").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-d-skip").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("skipLead", { row: ready[idx].row });
   nextLead();
 }));
 
-$("btn-d-send").addEventListener("click", (e) => withBusy(e.target, async () => {
-  if (!profile.name || !profile.address) { $("profile-card").open = true; throw new Error("Add your name and mailing address under Your details first."); }
+$("btn-d-send").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  if (!profile.name || !profile.address) { goTo("setup", "profile-card"); throw new Error("Add your name and mailing address under Your details first."); }
   const body = $("d-body").value.trim();
   const subject = $("d-subject").value.trim();
   if (!subject) throw new Error("Add a subject.");
@@ -680,6 +905,7 @@ $("btn-d-send").addEventListener("click", (e) => withBusy(e.target, async () => 
     subjectStyle: draft.subjectStyle, openerStyle: draft.openerStyle, mainPoint: draft.mainPoint, lang, sendAnyway: $("d-anyway").checked,
   });
   toast(`Sent to ${lead.Email}`);
+  sentToday++;
   nextLead();
 }));
 
@@ -692,16 +918,18 @@ async function loadAnalytics() {
   $("st-replied").textContent = a.replied;
   $("st-declined").textContent = a.declined;
   $("st-awaiting").textContent = a.awaiting;
+  $("st-rate").textContent = a.sent ? `${a.replyRate}%` : "–";
+  $("pip-analytics").textContent = "";
   $("an-rates").textContent = a.sent
     ? `Reply rate ${a.replyRate}% (${a.positiveRate}% interested) · Bounce rate ${a.bounceRate}% · ${a.waiting} leads waiting to be emailed${a.followUps ? ` · ${a.followUps} follow-ups sent` : ""}${a.autoReplies ? ` · ${a.autoReplies} auto-replies` : ""}`
-    : `Nothing sent yet. ${a.waiting} leads waiting to be emailed.`;
+    : `Nothing sent yet. ${a.waiting} lead${a.waiting === 1 ? "" : "s"} waiting to be emailed.`;
   $("an-last").textContent = a.lastCheck ? `Inbox last checked ${new Date(a.lastCheck).toLocaleString()}. It checks every 10 minutes.` : "Inbox not checked yet.";
 
   renderStyles(a.stats);
   const days = $("an-days");
   days.replaceChildren();
   const max = Math.max(1, ...a.byDay.map(([, n]) => n));
-  if (!a.byDay.length) days.innerHTML = '<p class="muted small">No emails sent yet.</p>';
+  if (!a.byDay.length) days.innerHTML = '<p class="muted small">No emails sent yet. Your daily totals show here.</p>';
   for (const [d, n] of a.byDay) {
     const bar = document.createElement("div");
     bar.className = "bar";
@@ -712,7 +940,7 @@ async function loadAnalytics() {
 
   const list = $("an-recent");
   list.replaceChildren();
-  if (!a.recent.length) list.innerHTML = '<li class="muted">No replies or bounces yet.</li>';
+  if (!a.recent.length) list.innerHTML = '<li class="muted small">No replies or bounces yet. You get a notification as soon as someone answers.</li>';
   for (const l of a.recent) {
     const li = document.createElement("li");
     const link = document.createElement("a");
@@ -750,7 +978,7 @@ function renderStyles(st) {
   }
 }
 
-$("btn-check").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-check").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const r = await send("checkNow");
   toast(r.checked ? `Checked ${r.checked} conversation${r.checked === 1 ? "" : "s"}, ${r.changes} new update${r.changes === 1 ? "" : "s"}` : "No sent emails to check yet");
   await loadAnalytics();
@@ -765,24 +993,30 @@ function setFollowUps(r) {
   fuIdx = 0;
   $("fu-info").textContent = fus.length
     ? `${fus.length} follow-up${fus.length === 1 ? "" : "s"} due.${r.weekend ? " It's the weekend, so they'll wait until Monday." : ""}`
-    : "No follow-ups due. Leads with no reply get one after 4 days, and a last one 7 days after that.";
+    : "None due. Leads with no reply get one after 4 days, and a last one 7 days after that. Then it stops.";
   showFollowUp(true);
 }
 
 function fuCount() {
   const n = textLength($("fu-body").value);
-  $("fu-count").textContent = `(${n}/${FOLLOWUP_LIMIT}, links not counted)`;
+  $("fu-count").textContent = `${n} / ${FOLLOWUP_LIMIT} characters (links not counted)`;
   $("fu-count").className = n > FOLLOWUP_LIMIT ? "over" : "";
+  $("fu-meter").style.width = `${Math.min(100, (n / FOLLOWUP_LIMIT) * 100)}%`;
+  $("fu-meter").className = n > FOLLOWUP_LIMIT ? "over" : "";
 }
 
 function showFollowUp(fresh) {
   const lead = fus[fuIdx];
   $("fu").hidden = !lead;
+  updateCounts();
   if (!lead) return;
   const step = (Number(lead["Follow-ups Sent"]) || 0) + 1;
+  const name = lead.Name || lead.Business || lead.Email;
+  $("fu-avatar").replaceWith(Object.assign(avatar(name, "avatar lg"), { id: "fu-avatar" }));
+  $("fu-name").textContent = name;
   if (fresh) { $("fu-segment").value = guessSegment(lead); $("fu-lang").value = leadLang(lead); }
   $("fu-to").textContent = lead.Email;
-  $("fu-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}) · ${fuIdx + 1} of ${fus.length}`;
+  $("fu-who").textContent = [lead.Name && lead.Business ? lead.Business : "", lead.Country, `${fuIdx + 1} of ${fus.length}`].filter(Boolean).join(" · ");
   $("fu-step").textContent = step === 1
     ? `Follow-up 1 of 2: shares your samples. First email sent ${new Date(lead["Sent At"]).toLocaleDateString()}: "${lead.Subject}"`
     : "Follow-up 2 of 2: a polite last email. After this, no more emails to this lead.";
@@ -793,14 +1027,14 @@ function showFollowUp(fresh) {
 function nextFollowUp() {
   fus.splice(fuIdx, 1);
   if (fuIdx >= fus.length) fuIdx = 0;
-  $("fu-info").textContent = fus.length ? `${fus.length} follow-up${fus.length === 1 ? "" : "s"} due.` : "All follow-ups done for now.";
+  $("fu-info").textContent = fus.length ? `${fus.length} follow-up${fus.length === 1 ? "" : "s"} due.` : "All follow-ups done for now. Nice work.";
   showFollowUp(true);
 }
 
 $("fu-body").addEventListener("input", fuCount);
 $("fu-segment").addEventListener("change", () => showFollowUp(false));
 $("fu-lang").addEventListener("change", () => showFollowUp(false));
-$("btn-fu-deepl").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-fu-deepl").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const lead = fus[fuIdx];
   const lang = $("fu-lang").value;
   if (lang === "en") throw new Error("Pick the language to translate into first.");
@@ -813,18 +1047,30 @@ $("btn-fu-deepl").addEventListener("click", (e) => withBusy(e.target, async () =
 }));
 $("btn-fu-load").addEventListener("click", loadReady);
 $("btn-fu-later").addEventListener("click", () => { if (fus.length > 1) { fuIdx = (fuIdx + 1) % fus.length; showFollowUp(true); } else toast("This is the only one due"); });
-$("btn-fu-stop").addEventListener("click", (e) => withBusy(e.target, async () => {
+$("btn-fu-stop").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("stopFollowUps", { row: fus[fuIdx].row });
   toast("No more follow-ups to this lead");
   nextFollowUp();
 }));
-$("btn-fu-send").addEventListener("click", (e) => withBusy(e.target, async () => {
-  if (!profile.name || !profile.address) { $("profile-card").open = true; throw new Error("Add your name and mailing address under Your details first."); }
+$("btn-fu-send").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  if (!profile.name || !profile.address) { goTo("setup", "profile-card"); throw new Error("Add your name and mailing address under Your details first."); }
   const body = $("fu-body").value.trim();
   if (textLength(body) > FOLLOWUP_LIMIT) throw new Error(`Shorten the follow-up to ${FOLLOWUP_LIMIT} characters or less (links not counted).`);
   const lead = fus[fuIdx];
-  if (!(Number(lead["Follow-ups Sent"]) || 0) && !profile.samples && !profile.portfolio) { $("profile-card").open = true; throw new Error("Add a samples link under Your details first."); }
+  if (!(Number(lead["Follow-ups Sent"]) || 0) && !profile.samples && !profile.portfolio) { goTo("setup", "profile-card"); throw new Error("Add a samples link under Your details first."); }
   const { n } = await send("sendFollowUp", { row: lead.row, text: `${body}\n${footer(profile, lead, $("fu-lang").value)}` });
   toast(`Follow-up ${n} sent to ${lead.Email}`);
+  sentToday++;
   nextFollowUp();
 }));
+
+// ---------- start ----------
+(async () => {
+  await refresh();
+  loadProfile().catch(() => {});
+  await loadCaptures(true);
+  if (job?.status === "running") setMethod("auto");
+  if (st.signedIn && st.sheet) loadReady();
+  const t = new URLSearchParams(location.search).get("tab");
+  if (t) showTab(t);
+})();

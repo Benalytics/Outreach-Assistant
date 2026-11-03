@@ -2,276 +2,526 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Outreach Assistant</title>
   <link rel="stylesheet" href="sidepanel.css">
 </head>
 <body>
-  <header>
-    <div class="row-between"><h1>Outreach Assistant</h1><button id="btn-full" class="link small" title="Open in a full browser tab">Open full page ↗</button></div>
-    <nav>
-      <button class="tab active" data-tab="setup">Setup</button>
-      <button class="tab" data-tab="leads">Leads</button>
-      <button class="tab" data-tab="compose">Compose</button>
-      <button class="tab" data-tab="analytics">Analytics</button>
+  <!-- Icons, drawn once and reused with <use href="#i-…"> -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></symbol>
+      <symbol id="i-mail" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+      <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></symbol>
+      <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
+      <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></symbol>
+      <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></symbol>
+      <symbol id="i-pointer" viewBox="0 0 24 24"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="m13 13 6 6"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-chart" viewBox="0 0 24 24"><path d="M12 20V10M18 20V4M6 20v-4"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></symbol>
+      <symbol id="i-book" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+      <symbol id="i-briefcase" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l5.64 5.36A9 9 0 0 0 20.49 15"/></symbol>
+      <symbol id="i-repeat" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></symbol>
+      <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+      <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 11.5 8.5 8.5 0 0 1 12.5 3h.5a8.5 8.5 0 0 1 8 8z"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/></symbol>
+      <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+    </defs>
+  </svg>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"><svg class="i"><use href="#i-send"/></svg></div>
+      <div class="brand-text">
+        <div class="brand-name">Outreach Assistant</div>
+        <div class="brand-sub">Find leads · Write to them · Track replies</div>
+      </div>
+      <button id="btn-help" class="icon-btn" title="How this works"><svg class="i"><use href="#i-help"/></svg></button>
+      <button id="btn-full" class="icon-btn" title="Open as a full page"><svg class="i"><use href="#i-expand"/></svg></button>
+    </div>
+    <nav class="steps" aria-label="Steps">
+      <button class="tab active" data-tab="setup"><span class="num">1</span><span class="lbl">Set up</span><span class="pip" id="pip-setup"></span></button>
+      <button class="tab" data-tab="leads"><span class="num">2</span><span class="lbl">Find leads</span><span class="pip" id="pip-leads"></span></button>
+      <button class="tab" data-tab="compose"><span class="num">3</span><span class="lbl">Write &amp; send</span><span class="pip" id="pip-compose"></span></button>
+      <button class="tab" data-tab="analytics"><span class="num">4</span><span class="lbl">Results</span><span class="pip" id="pip-analytics"></span></button>
     </nav>
   </header>
 
-  <div id="toast" hidden></div>
+  <div id="guide" class="guide" hidden>
+    <div class="guide-ic"><svg class="i"><use href="#i-sparkle"/></svg></div>
+    <div class="guide-body"><div class="guide-k">Next step</div><div id="guide-text"></div></div>
+    <button id="guide-go" class="btn btn-primary btn-sm">Go<svg class="i"><use href="#i-arrow"/></svg></button>
+  </div>
 
   <main>
+    <!-- ======================= 1. SET UP ======================= -->
     <section id="tab-setup" class="panel active">
-      <div class="card">
-        <h2>1. Google account</h2>
-        <p id="auth-status" class="muted">Checking…</p>
-        <button id="btn-signin" class="primary">Sign in with Google</button>
-        <button id="btn-signout" class="secondary" hidden>Sign out</button>
+      <div class="intro">
+        <h2>Let's get you set up</h2>
+        <p>Three quick steps and you're ready. The extras below them are optional.</p>
+        <div class="meter"><div id="setup-bar"></div></div>
+        <p id="setup-progress" class="muted small"></p>
       </div>
 
-      <div class="card">
-        <h2>2. Apollo API key</h2>
-        <p id="apollo-status" class="muted">Used to find people on Apollo. It stays in this browser only.</p>
-        <input id="apollo-key" type="password" placeholder="Paste your Apollo API key">
-        <button id="btn-apollo-save" class="secondary">Save key</button>
-      </div>
-
-      <div class="card">
-        <h2>3. Hunter API key</h2>
-        <p id="hunter-status" class="muted">Checks each mailbox for real, and finds emails when a website lists none. It stays in this browser only.</p>
-        <input id="hunter-key" type="password" placeholder="Paste your Hunter API key">
-        <button id="btn-hunter-save" class="secondary">Save key</button>
-        <label class="check small"><input id="use-hunter" type="checkbox" checked> Check every email with Hunter (1 verification credit each)</label>
-        <label class="check small"><input id="use-hunter-search" type="checkbox" checked> Ask Hunter when a website shows no email (1 search credit each)</label>
-      </div>
-
-      <div class="card">
-        <h2>4. DeepL translation (optional)</h2>
-        <p id="deepl-status" class="muted">Translates your drafts into the lead's language with better wording than the built-in versions. A free DeepL API key gives you 500,000 characters a month. It stays in this browser only.</p>
-        <input id="deepl-key" type="password" placeholder="Paste your DeepL API key">
-        <button id="btn-deepl-save" class="secondary">Save key</button>
-        <label class="small muted" for="deepl-formal">Tone for translations</label>
-        <select id="deepl-formal">
-          <option value="1">Formal (Sie, vous, usted…)</option>
-          <option value="0">Informal (du, tu, tú…)</option>
-        </select>
-      </div>
-
-      <div class="card" id="sheet-card">
-        <h2>5. Leads sheet</h2>
-        <div id="sheet-connected" hidden>
-          <p>Saving leads to <a id="sheet-link" target="_blank" rel="noopener"></a></p>
-          <button id="btn-sheet-disconnect" class="secondary">Use a different sheet</button>
+      <div class="grid-2">
+        <div class="card" id="card-google">
+          <div class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-user"/></svg></span>
+            <div class="grow"><h3>Your Google account</h3><p class="muted small">Sends email from your Gmail and saves leads to Google Sheets.</p></div>
+            <span class="pill" id="pill-google">To do</span>
+          </div>
+          <p id="auth-status" class="muted small">Checking…</p>
+          <button id="btn-signin" class="btn btn-primary btn-block">Sign in with Google</button>
+          <button id="btn-signout" class="btn btn-ghost btn-sm" hidden>Sign out</button>
         </div>
-        <div id="sheet-setup">
-          <button id="btn-sheet-create" class="primary">Create a new leads sheet</button>
-          <p class="muted or">or connect one you already have</p>
-          <input id="sheet-input" type="text" placeholder="Paste the Google Sheet link">
-          <button id="btn-sheet-connect" class="secondary">Connect sheet</button>
+
+        <div class="card" id="sheet-card">
+          <div class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-sheet"/></svg></span>
+            <div class="grow"><h3>Your leads sheet</h3><p class="muted small">A Google Sheet where every lead you save is kept, with its email history.</p></div>
+            <span class="pill" id="pill-sheet">To do</span>
+          </div>
+          <div id="sheet-connected" hidden>
+            <p class="small">Saving leads to <a id="sheet-link" target="_blank" rel="noopener"></a></p>
+            <button id="btn-sheet-disconnect" class="btn btn-ghost btn-sm">Use a different sheet</button>
+          </div>
+          <div id="sheet-setup">
+            <button id="btn-sheet-create" class="btn btn-primary btn-block">Create my leads sheet</button>
+            <p class="muted or">or use one you already have</p>
+            <div class="inline">
+              <input id="sheet-input" type="text" placeholder="Paste the Google Sheet link">
+              <button id="btn-sheet-connect" class="btn btn-secondary">Connect</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="profile-card">
+          <div class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-pen"/></svg></span>
+            <div class="grow"><h3>Your details</h3><p class="muted small">Your signature under every email. The law asks for a postal address and a way to opt out on business emails, so these are added for you.</p></div>
+            <span class="pill" id="pill-profile">To do</span>
+          </div>
+          <label class="field"><span>Your name and title</span><input id="pf-name" placeholder="e.g. Ada Lee, Children's Book Illustrator"></label>
+          <label class="field"><span>Portfolio link</span><input id="pf-portfolio" placeholder="https://…"></label>
+          <label class="field"><span>Mailing address <em>(city and country at least)</em></span><input id="pf-address" placeholder="e.g. Lagos, Nigeria"></label>
+          <label class="field"><span>Samples link <em>(shared in the first follow-up)</em></span><input id="pf-samples" placeholder="e.g. a Google Drive folder"></label>
+          <label class="field"><span>Reviews link <em>(shared in the last follow-up)</em></span><input id="pf-reviews" placeholder="e.g. your Upwork profile"></label>
+          <label class="field narrow"><span>Most emails a day</span><input id="pf-limit" type="number" min="1" max="200" value="30"></label>
+          <button id="btn-profile-save" class="btn btn-primary btn-block">Save my details</button>
         </div>
       </div>
-      <div class="card">
-        <h2>6. Backup</h2>
-        <p class="muted small">Downloads one file with your captured leads, your details, your settings and a copy of every lead in your sheet. API keys are never included. Restoring puts back the captured leads, details and settings on this or another computer; your Google Sheet itself is not changed.</p>
-        <div class="row-gap">
-          <button id="btn-backup" class="secondary">Download backup</button>
-          <button id="btn-restore" class="secondary">Restore from backup</button>
-        </div>
-        <input id="backup-file" type="file" accept=".json,application/json" hidden>
-        <p id="backup-info" class="muted small"></p>
+
+      <h4 class="group-title">Optional extras</h4>
+      <div class="grid-2">
+        <details class="card fold" id="card-hunter">
+          <summary class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-shield"/></svg></span>
+            <div class="grow"><h3>Hunter <span class="tag">Recommended</span></h3><p class="muted small">Checks that each email really exists, and finds emails when a website shows none.</p></div>
+            <span class="pill" id="pill-hunter">Off</span>
+          </summary>
+          <p id="hunter-status" class="muted small">Paste your Hunter API key. It stays in this browser only.</p>
+          <div class="inline">
+            <input id="hunter-key" type="password" placeholder="Hunter API key">
+            <button id="btn-hunter-save" class="btn btn-secondary">Save</button>
+          </div>
+          <label class="switch"><input id="use-hunter" type="checkbox" checked><span class="track"></span><span>Check every email with Hunter <em>(1 verification credit each)</em></span></label>
+          <label class="switch"><input id="use-hunter-search" type="checkbox" checked><span class="track"></span><span>Ask Hunter when a website shows no email <em>(1 search credit each)</em></span></label>
+        </details>
+
+        <details class="card fold" id="card-lookup">
+          <summary class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-search"/></svg></span>
+            <div class="grow"><h3>Web look-ups <span class="tag">Free</span></h3><p class="muted small">Finds an author's own website and any job posts they've put up for illustration, covers or formatting.</p></div>
+            <span class="pill on" id="pill-lookup">On</span>
+          </summary>
+          <label class="switch"><input id="use-lookup" type="checkbox" checked><span class="track"></span><span>Look up the website when a lead has none <em>(Goodreads, link-in-bio pages, a web search)</em></span></label>
+          <label class="switch"><input id="use-job-check" type="checkbox" checked><span class="track"></span><span>Check each lead for related job posts</span></label>
+          <p id="lookup-status" class="muted small"></p>
+        </details>
+
+        <details class="card fold" id="card-apollo">
+          <summary class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-key"/></svg></span>
+            <div class="grow"><h3>Apollo</h3><p class="muted small">Search Apollo's database of people by keyword, job title and place.</p></div>
+            <span class="pill" id="pill-apollo">Off</span>
+          </summary>
+          <p id="apollo-status" class="muted small">Paste your Apollo API key. It stays in this browser only.</p>
+          <div class="inline">
+            <input id="apollo-key" type="password" placeholder="Apollo API key">
+            <button id="btn-apollo-save" class="btn btn-secondary">Save</button>
+          </div>
+        </details>
+
+        <details class="card fold" id="card-deepl">
+          <summary class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-globe"/></svg></span>
+            <div class="grow"><h3>DeepL translation</h3><p class="muted small">Better wording when you write to people in other languages. The free plan gives 500,000 characters a month.</p></div>
+            <span class="pill" id="pill-deepl">Off</span>
+          </summary>
+          <p id="deepl-status" class="muted small">Paste your DeepL API key. It stays in this browser only.</p>
+          <div class="inline">
+            <input id="deepl-key" type="password" placeholder="DeepL API key">
+            <button id="btn-deepl-save" class="btn btn-secondary">Save</button>
+          </div>
+          <label class="field"><span>Tone for translations</span>
+            <select id="deepl-formal">
+              <option value="1">Formal (Sie, vous, usted…)</option>
+              <option value="0">Informal (du, tu, tú…)</option>
+            </select>
+          </label>
+        </details>
+
+        <details class="card fold" id="card-backup">
+          <summary class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-download"/></svg></span>
+            <div class="grow"><h3>Backup</h3><p class="muted small">One file with your leads, details and settings. API keys are never included.</p></div>
+          </summary>
+          <div class="row-gap">
+            <button id="btn-backup" class="btn btn-secondary"><svg class="i"><use href="#i-download"/></svg>Download backup</button>
+            <button id="btn-restore" class="btn btn-secondary"><svg class="i"><use href="#i-upload"/></svg>Restore</button>
+          </div>
+          <input id="backup-file" type="file" accept=".json,application/json" hidden>
+          <p id="backup-info" class="muted small">Restoring adds back your captured leads, details and settings, on this or another computer. Your Google Sheet itself isn't changed.</p>
+        </details>
       </div>
     </section>
 
+    <!-- ======================= 2. FIND LEADS ======================= -->
     <section id="tab-leads" class="panel">
-      <div class="cols">
-      <div class="card">
-        <h2>Capture by hand</h2>
-        <p class="muted small">Open a page, then press the button. Works on Google Maps, Yelp, Trustpilot, Amazon (book, author and search pages), Instagram, Facebook, Threads, X, Indeed, Glassdoor, and any business website. On a results page it captures everything listed.</p>
-        <button id="btn-capture" class="primary">Capture this page</button>
-        <label class="check small"><input id="watch" type="checkbox"> Keep capturing while I scroll a results page</label>
-        <p id="capture-info" class="muted small" hidden></p>
-      </div>
-
-      <div class="card">
-        <h2>Automatic capture</h2>
-        <p class="muted small">Goes through search results by itself in a separate small window, at a human pace. Keep that window open (behind others is fine).</p>
-        <input id="job-keyword" placeholder="What to look for, e.g. children's book author, preschool">
-        <input id="job-place" placeholder="Where, e.g. London, United Kingdom">
-        <div class="checks">
-          <label class="check small"><input type="checkbox" name="job-src" value="maps" checked> Google Maps</label>
-          <label class="check small"><input type="checkbox" name="job-src" value="yelp"> Yelp</label>
-          <label class="check small"><input type="checkbox" name="job-src" value="trustpilot"> Trustpilot</label>
-          <label class="check small"><input type="checkbox" name="job-src" value="amazon"> Amazon books</label>
-        </div>
-        <div class="row-gap">
-          <label class="small muted grow">Stop at this many ready leads<input id="job-target" type="number" min="1" max="500" value="30"></label>
-          <label class="small muted grow">Max pages a day<input id="job-pages" type="number" min="1" max="300" value="40"></label>
-        </div>
-        <button id="btn-job-start" class="primary">Start automatic capture</button>
-        <button id="btn-job-stop" class="secondary" hidden>Stop</button>
-        <p id="job-info" class="muted small"></p>
-      </div>
-      </div>
-
-      <div class="card" id="captured-card">
-        <div class="row-between"><h2>Captured</h2><span id="cap-counts" class="muted small"></span></div>
-        <div class="filters" id="cap-filters">
-          <button class="chip active" data-f="all">All</button>
-          <button class="chip" data-f="ready">Ready</button>
-          <button class="chip" data-f="needs_website">Needs website</button>
-          <button class="chip" data-f="working">Checking</button>
-          <button class="chip" data-f="no_email">No email</button>
-          <button class="chip" data-f="saved">Saved</button>
-        </div>
-        <p class="muted small">Each capture is checked in the background: its website is searched for an email, then the email is verified. Verified and valid emails are ticked for saving.</p>
-        <ul id="cap-list" class="cap-list"></ul>
-        <button id="btn-cap-save" class="primary">Save ticked to sheet</button>
-        <div class="row-gap">
-          <button id="btn-cap-clear-saved" class="secondary">Clear saved</button>
-          <button id="btn-cap-clear-dead" class="secondary">Clear no-email</button>
-          <button id="btn-cap-csv" class="secondary">Export CSV</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Search Apollo</h2>
-        <select id="apollo-preset">
-          <option value="">Choose a starting point…</option>
-          <option value="authors">Self-published children's authors</option>
-          <option value="publishers">Small children's publishers</option>
-          <option value="educators">Educators and learning brands</option>
-          <option value="coaches">Coaches needing lead magnets or workbooks</option>
-        </select>
-        <input id="apollo-titles" placeholder="Job titles, comma separated">
-        <input id="apollo-keywords" placeholder="Keywords">
-        <input id="apollo-locations" placeholder="Locations, e.g. United States, United Kingdom">
-        <button id="btn-apollo-search" class="primary">Search</button>
-        <div id="apollo-results" hidden>
-          <div class="row-between"><p id="apollo-count" class="muted small"></p><button id="btn-apollo-all" class="link small">Select all</button></div>
-          <ul id="apollo-list" class="lead-list"></ul>
-          <div class="row-gap">
-            <button id="btn-apollo-more" class="secondary">More results</button>
-            <button id="btn-apollo-reveal" class="primary">Get emails for selected</button>
+      <div class="leads-layout">
+        <div class="leads-left">
+          <div class="intro">
+            <h2>Find people to email</h2>
+            <p>Choose how. Everyone you find lands in <strong>Your leads</strong>, where their email is found and checked for you.</p>
           </div>
-          <p class="muted small">Getting emails uses one Apollo credit per person.</p>
-        </div>
-      </div>
+          <div class="methods" id="methods" role="tablist">
+            <button class="method active" data-m="capture"><svg class="i"><use href="#i-pointer"/></svg><span class="m-t">This page</span><span class="m-d">Capture what you're looking at</span></button>
+            <button class="method" data-m="auto"><svg class="i"><use href="#i-zap"/></svg><span class="m-t">Automatic</span><span class="m-d">Searches sites for you</span></button>
+            <button class="method" data-m="apollo"><svg class="i"><use href="#i-search"/></svg><span class="m-t">Apollo</span><span class="m-d">Search a people database</span></button>
+            <button class="method" data-m="manual"><svg class="i"><use href="#i-user-plus"/></svg><span class="m-t">Type one in</span><span class="m-d">Someone you already know</span></button>
+          </div>
 
-      <div class="card">
-        <h2>Add a lead by hand</h2>
-        <form id="lead-form">
-          <input name="Name" placeholder="Contact name">
-          <input name="Business" placeholder="Business name">
-          <input name="Email" type="email" placeholder="Email" required>
-          <input name="Website" placeholder="Website">
-          <input name="Phone" placeholder="Phone">
-          <input name="Location" placeholder="City / area">
-          <textarea name="Notes" rows="2" placeholder="Notes (their problem, anything useful for the email)"></textarea>
-          <button type="submit" class="primary">Check and save to sheet</button>
-        </form>
-      </div>
-      <div class="card">
-        <div class="row-between">
-          <h2>Saved leads</h2>
-          <button id="btn-refresh" class="link">Refresh</button>
+          <div class="card method-card" id="m-capture">
+            <h3>Capture the page you're on</h3>
+            <ol class="howto">
+              <li>Open a page in Chrome: an Amazon or Goodreads book or author page, a Kickstarter project, an Instagram, X, Threads, Facebook or LinkedIn profile, a LinkedIn, Indeed or Glassdoor job post, a Reddit hiring post, Google Maps, or any website.</li>
+              <li>Press the button. On a list of results, it captures everyone on it.</li>
+            </ol>
+            <button id="btn-capture" class="btn btn-primary btn-block btn-lg"><svg class="i"><use href="#i-pointer"/></svg>Capture this page</button>
+            <label class="switch"><input id="watch" type="checkbox"><span class="track"></span><span>Keep capturing while I scroll a list</span></label>
+            <p id="capture-info" class="note" hidden></p>
+          </div>
+
+          <div class="card method-card" id="m-auto" hidden>
+            <h3>Automatic search</h3>
+            <p class="muted small">It opens a small window and goes through the sites you pick, one page at a time at a human pace. Leave that window open (behind others is fine).</p>
+            <label class="field"><span>Who are you looking for?</span><input id="job-keyword" placeholder="e.g. children's book author"></label>
+            <div class="ideas" data-for="job-keyword">
+              <button class="idea">children's book author</button><button class="idea">picture book author</button><button class="idea">self-published author</button><button class="idea">children's book publisher</button><button class="idea">homeschool</button><button class="idea">kids coach</button>
+            </div>
+            <label class="field"><span>Where? <em>(optional)</em></span><input id="job-place" placeholder="e.g. London, United Kingdom"></label>
+
+            <div class="src-group" data-group="books">
+              <div class="src-head"><svg class="i"><use href="#i-book"/></svg><strong>Book sites</strong><button class="link small src-all">All</button></div>
+              <div class="chips">
+                <label class="tchip"><input type="checkbox" name="job-src" value="amazon" checked><span>Amazon books</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="goodreads" checked><span>Goodreads</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="kickstarter"><span>Kickstarter</span></label>
+                <label class="tchip" title="Reedsy Discovery, BookBub, Bookshop.org, Barnes &amp; Noble, Lulu and Blurb"><input type="checkbox" name="job-src" value="booksites"><span>Reedsy, BookBub &amp; more</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="maps"><span>Google Maps</span></label>
+              </div>
+            </div>
+            <div class="src-group" data-group="social">
+              <div class="src-head"><svg class="i"><use href="#i-users"/></svg><strong>Social media</strong><button class="link small src-all">All</button></div>
+              <div class="chips">
+                <label class="tchip"><input type="checkbox" name="job-src" value="instagram"><span>Instagram</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="facebook"><span>Facebook</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="threads"><span>Threads</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="linkedin"><span>LinkedIn</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="x"><span>X (Twitter)</span></label>
+              </div>
+              <p class="hint">Profiles are found through a web search, so you don't need to be signed in to these sites.</p>
+            </div>
+            <div class="src-group" data-group="jobs">
+              <div class="src-head"><svg class="i"><use href="#i-briefcase"/></svg><strong>Job posts</strong><button class="link small src-all">All</button></div>
+              <div class="chips">
+                <label class="tchip"><input type="checkbox" name="job-src" value="linkedinjobs"><span>LinkedIn Jobs</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="indeed"><span>Indeed</span></label>
+                <label class="tchip"><input type="checkbox" name="job-src" value="reddit"><span>Reddit hiring posts</span></label>
+              </div>
+              <label class="field" id="job-words-field" hidden><span>Jobs to look for</span><input id="job-words" placeholder="children's book illustrator"></label>
+            </div>
+
+            <details class="more">
+              <summary>Limits</summary>
+              <div class="row-gap">
+                <label class="field grow"><span>Stop at this many ready leads</span><input id="job-target" type="number" min="1" max="500" value="30"></label>
+                <label class="field grow"><span>Most pages a day</span><input id="job-pages" type="number" min="1" max="300" value="40"></label>
+              </div>
+            </details>
+            <button id="btn-job-start" class="btn btn-primary btn-block btn-lg"><svg class="i"><use href="#i-zap"/></svg>Start automatic search</button>
+            <div id="job-live" class="live" hidden>
+              <div class="live-top"><span class="dot"></span><strong>Searching…</strong><span id="job-count" class="muted small"></span></div>
+              <div class="meter"><div id="job-bar"></div></div>
+              <p id="job-info" class="small"></p>
+              <button id="btn-job-stop" class="btn btn-secondary btn-block">Stop</button>
+            </div>
+            <p id="job-done" class="note" hidden></p>
+          </div>
+
+          <div class="card method-card" id="m-apollo" hidden>
+            <h3>Search Apollo</h3>
+            <p class="muted small">Searching is free. Getting an email uses one Apollo credit per person. Add your Apollo key in Set up first.</p>
+            <label class="field"><span>Keyword</span><input id="apollo-q" placeholder="Type any keyword, e.g. children's book, picture books, homeschool"></label>
+            <div class="ideas" id="apollo-ideas">
+              <button class="idea" data-q="children's book" data-t="Author, Children's Book Author, Writer, Self-Published Author">Self-published authors</button>
+              <button class="idea" data-q="children's publishing" data-t="Publisher, Editor, Acquisitions Editor, Managing Editor, Founder">Publishers</button>
+              <button class="idea" data-q="early learning" data-t="Curriculum Director, Founder, Content Director, Head of Content">Educators</button>
+              <button class="idea" data-q="online course" data-t="Coach, Founder, Course Creator">Coaches</button>
+            </div>
+            <label class="field"><span>Job titles <em>(optional, separate with commas)</em></span><input id="apollo-titles" placeholder="e.g. Author, Publisher, Editor"></label>
+            <label class="field"><span>Locations <em>(optional)</em></span><input id="apollo-locations" placeholder="e.g. United States, United Kingdom"></label>
+            <button id="btn-apollo-search" class="btn btn-primary btn-block"><svg class="i"><use href="#i-search"/></svg>Search</button>
+            <div id="apollo-results" hidden>
+              <div class="row-between"><p id="apollo-count" class="muted small"></p><button id="btn-apollo-all" class="link small">Select all</button></div>
+              <ul id="apollo-list" class="lead-list"></ul>
+              <div class="row-gap">
+                <button id="btn-apollo-more" class="btn btn-secondary">More results</button>
+                <button id="btn-apollo-reveal" class="btn btn-primary">Get emails for selected</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card method-card" id="m-manual" hidden>
+            <h3>Add someone you know</h3>
+            <p class="muted small">The email is checked first, then saved straight to your sheet.</p>
+            <form id="lead-form">
+              <div class="row-gap">
+                <label class="field grow"><span>Name</span><input name="Name" placeholder="Their name"></label>
+                <label class="field grow"><span>Business</span><input name="Business" placeholder="Business name"></label>
+              </div>
+              <label class="field"><span>Email</span><input name="Email" type="email" placeholder="name@example.com" required></label>
+              <div class="row-gap">
+                <label class="field grow"><span>Website</span><input name="Website" placeholder="example.com"></label>
+                <label class="field grow"><span>Phone</span><input name="Phone" placeholder="Optional"></label>
+              </div>
+              <label class="field"><span>City or country</span><input name="Location" placeholder="e.g. Toronto, Canada"></label>
+              <label class="field"><span>Notes</span><textarea name="Notes" rows="2" placeholder="Anything that helps write to them: their book, what they need…"></textarea></label>
+              <button type="submit" class="btn btn-primary btn-block">Check and save</button>
+            </form>
+          </div>
         </div>
-        <ul id="lead-list" class="lead-list"><li class="muted">Connect a sheet to see leads.</li></ul>
-        <button id="btn-leads-csv" class="secondary" style="margin-top:8px">Export all saved leads as CSV</button>
+
+        <div class="leads-right">
+          <div class="card" id="captured-card">
+            <div class="card-head">
+              <span class="ic"><svg class="i"><use href="#i-inbox"/></svg></span>
+              <div class="grow"><h3>Your leads</h3><p id="cap-counts" class="muted small">Each one is checked for you: we find their website and email, check the email works, and look for job posts.</p></div>
+            </div>
+            <div class="filters" id="cap-filters">
+              <button class="chip active" data-f="all">All <b></b></button>
+              <button class="chip" data-f="ready">Ready <b></b></button>
+              <button class="chip" data-f="working">Checking <b></b></button>
+              <button class="chip" data-f="needs_website">Needs website <b></b></button>
+              <button class="chip" data-f="no_email">No email <b></b></button>
+              <button class="chip" data-f="saved">Saved <b></b></button>
+            </div>
+            <ul id="cap-list" class="cap-list"></ul>
+            <div class="savebar">
+              <button id="btn-cap-save" class="btn btn-primary btn-block"><svg class="i"><use href="#i-sheet"/></svg>Save ticked to my sheet</button>
+              <div class="row-gap tools">
+                <button id="btn-cap-clear-saved" class="link small">Clear saved</button>
+                <button id="btn-cap-clear-dead" class="link small">Clear no-email</button>
+                <button id="btn-cap-csv" class="link small">Export CSV</button>
+              </div>
+            </div>
+          </div>
+
+          <details class="card fold" id="saved-card">
+            <summary class="card-head">
+              <span class="ic"><svg class="i"><use href="#i-sheet"/></svg></span>
+              <div class="grow"><h3>Saved in your sheet</h3><p class="muted small">The latest 50 leads in your Google Sheet.</p></div>
+            </summary>
+            <div class="row-between"><span></span><button id="btn-refresh" class="link small">Refresh</button></div>
+            <ul id="lead-list" class="lead-list"><li class="muted">Connect a sheet to see leads.</li></ul>
+            <button id="btn-leads-csv" class="btn btn-secondary btn-block"><svg class="i"><use href="#i-download"/></svg>Export all saved leads (CSV)</button>
+          </details>
+        </div>
       </div>
     </section>
+
+    <!-- ======================= 3. WRITE & SEND ======================= -->
     <section id="tab-compose" class="panel">
-      <details class="card" id="profile-card">
-        <summary><h2>Your details</h2></summary>
-        <p class="muted small">Added under every email. US and EU law requires a way to opt out and a postal address on commercial email.</p>
-        <input id="pf-name" placeholder="Your name and title, e.g. Ada Lee, Children's Book Illustrator">
-        <input id="pf-portfolio" placeholder="Portfolio link">
-        <input id="pf-address" placeholder="Mailing address (city and country at minimum)">
-        <input id="pf-samples" placeholder="Samples link for follow-ups (e.g. a Google Drive folder)">
-        <input id="pf-reviews" placeholder="Reviews link for the last follow-up (e.g. your Upwork profile)">
-        <label class="small muted">Daily sending limit</label>
-        <input id="pf-limit" type="number" min="1" max="200" value="30">
-        <button id="btn-profile-save" class="secondary">Save details</button>
-      </details>
-
-      <div class="card">
-        <div class="row-between"><h2>Ready to email</h2><button id="btn-ready-load" class="link">Reload</button></div>
-        <p id="ready-info" class="muted small">Press Reload to load leads from your sheet.</p>
-        <div id="draft" hidden>
-          <p class="small"><strong>To:</strong> <span id="d-to"></span> <span id="d-who" class="muted"></span></p>
-          <div class="row-gap two">
-            <div><label class="small muted">Who they are</label><select id="d-segment"></select></div>
-            <div><label class="small muted">Language</label><select id="d-lang"></select></div>
-          </div>
-          <p id="d-research" class="research small" hidden></p>
-          <div id="d-strict" class="warn small" hidden>
-            <p id="d-strict-text"></p>
-            <label class="check"><input id="d-anyway" type="checkbox"> Send anyway</label>
-          </div>
-          <label class="small muted">Subject</label>
-          <input id="d-subject">
-          <label class="small muted">Message <span id="d-count"></span></label>
-          <textarea id="d-body" rows="7"></textarea>
-          <pre id="d-footer" class="footer-preview"></pre>
-          <p id="d-styles" class="muted small"></p>
-          <div class="row-gap">
-            <button id="btn-d-new" class="secondary">New version</button>
-            <button id="btn-d-deepl" class="secondary" hidden>Translate with DeepL</button>
-            <button id="btn-d-skip" class="secondary">Skip lead</button>
-          </div>
-          <button id="btn-d-send" class="primary" style="margin-top:8px">Send from Gmail</button>
-        </div>
+      <div class="intro">
+        <h2>Write and send</h2>
+        <p>Your best leads come first. Each email is written for you from what we found about them. Read it, change anything you like, then send.</p>
+      </div>
+      <div id="profile-missing" class="callout warn" hidden>
+        <svg class="i"><use href="#i-alert"/></svg>
+        <div class="grow">Add your name and mailing address before sending. They go under every email.</div>
+        <button id="btn-goto-profile" class="btn btn-secondary btn-sm">Add them</button>
       </div>
 
-      <div class="card">
-        <div class="row-between"><h2>Follow-ups due</h2><button id="btn-fu-load" class="link">Reload</button></div>
-        <p id="fu-info" class="muted small">No reply after 4 days gets follow-up 1 (samples). No reply 7 days after that gets follow-up 2 (a polite last email). Then it stops.</p>
-        <div id="fu" hidden>
-          <p class="small"><strong>To:</strong> <span id="fu-to"></span> <span id="fu-who" class="muted"></span></p>
-          <p class="small muted" id="fu-step"></p>
-          <div class="row-gap two">
-            <div><label class="small muted">Who they are</label><select id="fu-segment"></select></div>
-            <div><label class="small muted">Language</label><select id="fu-lang"></select></div>
+      <div class="seg" id="compose-switch">
+        <button class="active" data-c="new"><svg class="i"><use href="#i-mail"/></svg>New emails <b id="cnt-ready"></b></button>
+        <button data-c="fu"><svg class="i"><use href="#i-repeat"/></svg>Follow-ups <b id="cnt-fu"></b></button>
+      </div>
+
+      <div class="compose-grid">
+        <div class="card" id="new-card">
+          <div class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-mail"/></svg></span>
+            <div class="grow"><h3>New emails</h3><p id="ready-info" class="muted small">Loading your leads…</p></div>
+            <button id="btn-ready-load" class="icon-btn" title="Reload from my sheet"><svg class="i"><use href="#i-refresh"/></svg></button>
           </div>
-          <label class="small muted">Message <span id="fu-count"></span></label>
-          <textarea id="fu-body" rows="7"></textarea>
-          <p class="muted small">Sent as a reply in the same Gmail conversation, with your signature and opt-out line underneath.</p>
-          <div class="row-gap">
-            <button id="btn-fu-later" class="secondary">Later</button>
-            <button id="btn-fu-deepl" class="secondary" hidden>Translate with DeepL</button>
-            <button id="btn-fu-stop" class="secondary">No more follow-ups</button>
+          <div class="meter thin" title="Emails sent today"><div id="sent-bar"></div></div>
+          <p id="sent-text" class="muted tiny"></p>
+          <div id="draft" hidden>
+            <div class="lead-card">
+              <div class="avatar" id="d-avatar"></div>
+              <div class="grow">
+                <div class="lead-name" id="d-name"></div>
+                <div class="small"><span id="d-to"></span></div>
+                <div id="d-who" class="muted tiny"></div>
+              </div>
+              <span id="d-score" class="score-ring" title=""></span>
+            </div>
+            <div id="d-research" class="research" hidden></div>
+            <div id="d-strict" class="callout warn" hidden>
+              <svg class="i"><use href="#i-alert"/></svg>
+              <div class="grow"><p id="d-strict-text"></p><label class="check"><input id="d-anyway" type="checkbox"> Send anyway</label></div>
+            </div>
+            <div class="row-gap two">
+              <label class="field"><span>Who they are</span><select id="d-segment"></select></label>
+              <label class="field"><span>Language</span><select id="d-lang"></select></label>
+            </div>
+            <div class="composer">
+              <div class="composer-row"><span class="k">Subject</span><input id="d-subject"></div>
+              <textarea id="d-body" rows="7"></textarea>
+              <div class="composer-count"><div class="meter thin"><div id="d-meter"></div></div><span id="d-count"></span></div>
+              <pre id="d-footer" class="footer-preview"></pre>
+            </div>
+            <p id="d-styles" class="muted tiny"></p>
+            <button id="btn-d-send" class="btn btn-primary btn-block btn-lg"><svg class="i"><use href="#i-send"/></svg>Send from Gmail</button>
+            <div class="row-gap">
+              <button id="btn-d-new" class="btn btn-secondary"><svg class="i"><use href="#i-refresh"/></svg>Another version</button>
+              <button id="btn-d-deepl" class="btn btn-secondary" hidden><svg class="i"><use href="#i-globe"/></svg>Translate</button>
+              <button id="btn-d-skip" class="btn btn-ghost">Skip</button>
+            </div>
           </div>
-          <button id="btn-fu-send" class="primary" style="margin-top:8px">Send follow-up</button>
+          <div id="draft-empty" class="empty" hidden>
+            <svg class="i"><use href="#i-check"/></svg>
+            <p>No leads waiting for a first email.</p>
+            <button class="btn btn-secondary btn-sm" data-goto="leads">Find more leads</button>
+          </div>
+        </div>
+
+        <div class="card" id="fu-card" hidden>
+          <div class="card-head">
+            <span class="ic"><svg class="i"><use href="#i-repeat"/></svg></span>
+            <div class="grow"><h3>Follow-ups</h3><p id="fu-info" class="muted small">No reply after 4 days gets follow-up 1 with your samples. No reply 7 days after that gets a polite last email. Then it stops.</p></div>
+            <button id="btn-fu-load" class="icon-btn" title="Reload from my sheet"><svg class="i"><use href="#i-refresh"/></svg></button>
+          </div>
+          <div id="fu" hidden>
+            <div class="lead-card">
+              <div class="avatar" id="fu-avatar"></div>
+              <div class="grow">
+                <div class="lead-name" id="fu-name"></div>
+                <div class="small"><span id="fu-to"></span></div>
+                <div id="fu-who" class="muted tiny"></div>
+              </div>
+            </div>
+            <p class="stepnote" id="fu-step"></p>
+            <div class="row-gap two">
+              <label class="field"><span>Who they are</span><select id="fu-segment"></select></label>
+              <label class="field"><span>Language</span><select id="fu-lang"></select></label>
+            </div>
+            <div class="composer">
+              <div class="composer-row"><span class="k">Reply in the same conversation</span></div>
+              <textarea id="fu-body" rows="7"></textarea>
+              <div class="composer-count"><div class="meter thin"><div id="fu-meter"></div></div><span id="fu-count"></span></div>
+            </div>
+            <p class="muted tiny">Your signature and opt-out line are added underneath.</p>
+            <button id="btn-fu-send" class="btn btn-primary btn-block btn-lg"><svg class="i"><use href="#i-send"/></svg>Send follow-up</button>
+            <div class="row-gap">
+              <button id="btn-fu-later" class="btn btn-secondary">Later</button>
+              <button id="btn-fu-deepl" class="btn btn-secondary" hidden><svg class="i"><use href="#i-globe"/></svg>Translate</button>
+              <button id="btn-fu-stop" class="btn btn-ghost">No more follow-ups</button>
+            </div>
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- ======================= 4. RESULTS ======================= -->
     <section id="tab-analytics" class="panel">
-      <div class="card">
-        <div class="row-between"><h2>Results</h2><button id="btn-check" class="link">Check inbox now</button></div>
-        <p id="an-last" class="muted small"></p>
-        <div class="stats">
-          <div class="stat"><div class="num" id="st-sent">0</div><div class="lbl">Sent</div></div>
-          <div class="stat"><div class="num" id="st-bounced">0</div><div class="lbl">Bounced</div></div>
-          <div class="stat"><div class="num" id="st-opened">–</div><div class="lbl">Opened</div></div>
-          <div class="stat ok"><div class="num" id="st-replied">0</div><div class="lbl">Replied</div></div>
-          <div class="stat"><div class="num" id="st-declined">0</div><div class="lbl">Declined</div></div>
-          <div class="stat"><div class="num" id="st-awaiting">0</div><div class="lbl">No reply yet</div></div>
+      <div class="intro row-between">
+        <div><h2>Your results</h2><p id="an-last" class="muted small"></p></div>
+        <button id="btn-check" class="btn btn-secondary btn-sm"><svg class="i"><use href="#i-refresh"/></svg>Check inbox now</button>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><svg class="i"><use href="#i-send"/></svg><div class="num" id="st-sent">0</div><div class="lbl">Sent</div></div>
+        <div class="kpi good"><svg class="i"><use href="#i-chat"/></svg><div class="num" id="st-replied">0</div><div class="lbl">Replied</div></div>
+        <div class="kpi accent"><svg class="i"><use href="#i-target"/></svg><div class="num" id="st-rate">–</div><div class="lbl">Reply rate</div></div>
+        <div class="kpi"><svg class="i"><use href="#i-clock"/></svg><div class="num" id="st-awaiting">0</div><div class="lbl">No reply yet</div></div>
+        <div class="kpi"><svg class="i"><use href="#i-x"/></svg><div class="num" id="st-declined">0</div><div class="lbl">Said no</div></div>
+        <div class="kpi bad"><svg class="i"><use href="#i-alert"/></svg><div class="num" id="st-bounced">0</div><div class="lbl">Bounced</div></div>
+      </div>
+      <p id="an-rates" class="note"></p>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head"><span class="ic"><svg class="i"><use href="#i-sparkle"/></svg></span><div class="grow"><h3>What's working</h3><p class="muted small">Reply rates for each kind of subject and opening line. New drafts lean towards what gets replies. An email counts after it has had 3 days.</p></div></div>
+          <div id="an-styles"></div>
         </div>
-        <p id="an-rates" class="small"></p>
-        <p class="muted small">Opens aren't tracked. That needs a tracking image hosted on a server, and Apple Mail and Gmail often block or fake opens anyway. Replies are the number that matters.</p>
+        <div class="card">
+          <div class="card-head"><span class="ic"><svg class="i"><use href="#i-chart"/></svg></span><div class="grow"><h3>Sent per day</h3></div></div>
+          <div id="an-days" class="bars"></div>
+        </div>
+        <div class="card span-2">
+          <div class="card-head"><span class="ic"><svg class="i"><use href="#i-chat"/></svg></span><div class="grow"><h3>Latest responses</h3><p class="muted small">Click one to open the conversation in Gmail.</p></div></div>
+          <ul id="an-recent" class="lead-list"></ul>
+        </div>
       </div>
-      <div class="card">
-        <h2>What's working</h2>
-        <p class="muted small">Reply rates for each kind of subject line and opening line. New drafts lean towards the ones getting replies, while still trying the others now and then. An email counts once it has had 3 days to get an answer.</p>
-        <div id="an-styles"></div>
-      </div>
-      <div class="card">
-        <h2>Sent per day</h2>
-        <div id="an-days" class="bars"></div>
-      </div>
-      <div class="card">
-        <h2>Latest responses</h2>
-        <ul id="an-recent" class="lead-list"></ul>
-      </div>
+      <p class="muted tiny">Opens aren't tracked: Gmail and Apple Mail block or fake them, so replies are the number that matters.</p>
     </section>
   </main>
+
+  <div id="toast" role="status" hidden><svg class="i"><use href="#i-check"/></svg><span id="toast-text"></span></div>
+
+  <dialog id="help">
+    <div class="help-head"><h2>How it works</h2><button class="icon-btn" id="help-close" title="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <ol class="help-steps">
+      <li><strong>Set up.</strong> Sign in with Google, create your leads sheet and add your details. That's all that's needed.</li>
+      <li><strong>Find leads.</strong> Capture the page you're on, let the automatic search go through book sites, social media and job posts, search Apollo, or type someone in. The tool finds each person's website and email, checks the email works and looks for job posts. Tick the good ones and save them to your sheet.</li>
+      <li><strong>Write and send.</strong> Each lead gets a short personal email (under 300 characters) written from what was found about them. Edit it if you like and send it from your Gmail. Follow-ups are prepared for you after 4 and 11 days if there's no reply.</li>
+      <li><strong>Results.</strong> Replies and bounces are picked up every 10 minutes. You get a notification when someone answers.</li>
+    </ol>
+    <h3>Words you'll see</h3>
+    <dl class="glossary">
+      <dt><span class="badge Verified">Verified</span></dt><dd>Hunter confirmed the mailbox exists. Safe to send.</dd>
+      <dt><span class="badge Valid">Valid</span></dt><dd>The email looks right and its domain takes mail. Usually fine.</dd>
+      <dt><span class="badge Unknown">Unknown</span></dt><dd>Couldn't be confirmed. Not ticked for you.</dd>
+      <dt><span class="score hi">72</span></dt><dd>Lead score out of 100: how likely they are to need you, and how sure we are the email works. Hover it to see why.</dd>
+      <dt><span class="status needs_website">Needs website</span></dt><dd>No website or email found yet. Type one in if you know it.</dd>
+      <dt>💼 Job post</dt><dd>They've posted a job for illustration, a cover or formatting. Your best leads.</dd>
+    </dl>
+  </dialog>
 
   <script type="module" src="sidepanel.js"></script>
 </body>
