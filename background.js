@@ -9,6 +9,9 @@ import { hunterAccount } from "./lib/hunter.js";
 import { extractPage } from "./lib/extract.js";
 import { addCaptures, addReadyLeads, allCaptures, runQueue, supplyContact, removeCaptures, clearCaptures, updateCapture } from "./lib/captures.js";
 import { startJob, stopJob, getJob, runJob, AUTO_SOURCES } from "./lib/job.js";
+import { styleStats } from "./lib/learn.js";
+import { STRICT } from "./lib/country.js";
+import { translate, deeplUsage } from "./lib/deepl.js";
 
 // Clicking the toolbar icon opens the side panel.
 chrome.runtime.onInstalled.addListener(() => {
@@ -101,8 +104,8 @@ const handlers = {
     const { userEmail, sheet } = await chrome.storage.local.get(["userEmail", "sheet"]);
     let signedIn = false;
     try { await getToken(false); signedIn = true; } catch (_) {}
-    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch"]);
-    return { signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch };
+    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true, deeplKey, deeplFormal = true } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch", "deeplKey", "deeplFormal"]);
+    return { signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch, hasDeeplKey: !!deeplKey, deeplFormal };
   },
   async signIn() {
     const token = await getToken(true);
@@ -225,9 +228,9 @@ const handlers = {
     const sentToday = sentTodayCount(leads);
     const ready = leads.filter((l) => l.Email && !l["Email Status"] && ["Verified", "Valid"].includes(l.Verification));
     const followUps = leads.filter(followUpDue);
-    return { ready, sentToday, followUps, weekend: isWeekend() };
+    return { ready, sentToday, followUps, weekend: isWeekend(), stats: styleStats(leads) };
   },
-  async sendLeadEmail({ row, to, subject, text }) {
+  async sendLeadEmail({ row, to, subject, text, subjectStyle = "", openerStyle = "", lang = "", sendAnyway = false }) {
     const { sheet, userEmail, profile } = await chrome.storage.local.get(["sheet", "userEmail", "profile"]);
     if (!sheet) throw new Error("Connect a Google Sheet first.");
     const limit = Number(profile?.dailyLimit) || 30;
@@ -238,9 +241,13 @@ const handlers = {
     const lead = leads.find((l) => l.row === row);
     if (!lead || lead.Email !== to) throw new Error("The sheet changed. Reload leads and try again.");
     if (lead["Email Status"]) throw new Error("This lead has already been emailed.");
+    if (STRICT.has(lead.Country) && !sendAnyway) {
+      throw new Error(`${lead.Country} has strict rules on cold email to businesses. Tick "Send anyway" if you're sure it's allowed for this lead.`);
+    }
     const { threadId } = await sendEmail({ to, subject, text, from: userEmail });
     await updateLead(sheet.id, row, {
       "Email Status": "Sent", "Sent At": new Date().toISOString(), Subject: subject, "Gmail Thread ID": threadId,
+      "Subject Style": subjectStyle, "Opener Style": openerStyle, ...(lang ? { Language: lang } : {}),
     });
     return { threadId };
   },
@@ -284,6 +291,19 @@ const handlers = {
     await updateLead(sheet.id, row, { "Email Status": "Skipped" });
     return {};
   },
+  // ---------- DeepL ----------
+  async saveDeeplKey({ key }) {
+    const k = (key || "").trim();
+    if (!k) { await chrome.storage.local.remove("deeplKey"); return {}; }
+    await chrome.storage.local.set({ deeplKey: k });
+    try { return { usage: await deeplUsage() }; } catch (e) { await chrome.storage.local.remove("deeplKey"); throw e; }
+  },
+  async deeplUsage() { return { usage: await deeplUsage() }; },
+  async setDeeplFormal({ on }) { await chrome.storage.local.set({ deeplFormal: !!on }); return {}; },
+  async translate({ texts, lang, country }) {
+    const { deeplFormal = true } = await chrome.storage.local.get("deeplFormal");
+    return { texts: await translate(texts, lang, { formal: deeplFormal, country }) };
+  },
   async checkNow() {
     const r = await runInboxCheck();
     return { checked: r.checked, changes: r.changes.length };
@@ -293,7 +313,8 @@ const handlers = {
     if (!sheet) throw new Error("Connect a Google Sheet first.");
     await chrome.storage.local.set({ unread: 0 });
     chrome.action.setBadgeText({ text: "" });
-    return { ...summarize(await getLeads(sheet.id)), lastCheck: lastCheck || null };
+    const leads = await getLeads(sheet.id);
+    return { ...summarize(leads), stats: styleStats(leads), lastCheck: lastCheck || null };
   },
   async listLeads() {
     const { sheet } = await chrome.storage.local.get("sheet");

@@ -43,8 +43,20 @@
         <label class="check small"><input id="use-hunter-search" type="checkbox" checked> Ask Hunter when a website shows no email (1 search credit each)</label>
       </div>
 
+      <div class="card">
+        <h2>4. DeepL translation (optional)</h2>
+        <p id="deepl-status" class="muted">Translates your drafts into the lead's language with better wording than the built-in versions. A free DeepL API key gives you 500,000 characters a month. It stays in this browser only.</p>
+        <input id="deepl-key" type="password" placeholder="Paste your DeepL API key">
+        <button id="btn-deepl-save" class="secondary">Save key</button>
+        <label class="small muted" for="deepl-formal">Tone for translations</label>
+        <select id="deepl-formal">
+          <option value="1">Formal (Sie, vous, usted…)</option>
+          <option value="0">Informal (du, tu, tú…)</option>
+        </select>
+      </div>
+
       <div class="card" id="sheet-card">
-        <h2>4. Leads sheet</h2>
+        <h2>5. Leads sheet</h2>
         <div id="sheet-connected" hidden>
           <p>Saving leads to <a id="sheet-link" target="_blank" rel="noopener"></a></p>
           <button id="btn-sheet-disconnect" class="secondary">Use a different sheet</button>
@@ -172,15 +184,24 @@
         <p id="ready-info" class="muted small">Press Reload to load leads from your sheet.</p>
         <div id="draft" hidden>
           <p class="small"><strong>To:</strong> <span id="d-to"></span> <span id="d-who" class="muted"></span></p>
-          <label class="small muted">Who they are</label>
-          <select id="d-segment"></select>
+          <div class="row-gap two">
+            <div><label class="small muted">Who they are</label><select id="d-segment"></select></div>
+            <div><label class="small muted">Language</label><select id="d-lang"></select></div>
+          </div>
+          <p id="d-research" class="research small" hidden></p>
+          <div id="d-strict" class="warn small" hidden>
+            <p id="d-strict-text"></p>
+            <label class="check"><input id="d-anyway" type="checkbox"> Send anyway</label>
+          </div>
           <label class="small muted">Subject</label>
           <input id="d-subject">
           <label class="small muted">Message <span id="d-count"></span></label>
           <textarea id="d-body" rows="7"></textarea>
           <pre id="d-footer" class="footer-preview"></pre>
+          <p id="d-styles" class="muted small"></p>
           <div class="row-gap">
             <button id="btn-d-new" class="secondary">New version</button>
+            <button id="btn-d-deepl" class="secondary" hidden>Translate with DeepL</button>
             <button id="btn-d-skip" class="secondary">Skip lead</button>
           </div>
           <button id="btn-d-send" class="primary" style="margin-top:8px">Send from Gmail</button>
@@ -193,13 +214,16 @@
         <div id="fu" hidden>
           <p class="small"><strong>To:</strong> <span id="fu-to"></span> <span id="fu-who" class="muted"></span></p>
           <p class="small muted" id="fu-step"></p>
-          <label class="small muted">Who they are</label>
-          <select id="fu-segment"></select>
+          <div class="row-gap two">
+            <div><label class="small muted">Who they are</label><select id="fu-segment"></select></div>
+            <div><label class="small muted">Language</label><select id="fu-lang"></select></div>
+          </div>
           <label class="small muted">Message <span id="fu-count"></span></label>
           <textarea id="fu-body" rows="7"></textarea>
           <p class="muted small">Sent as a reply in the same Gmail conversation, with your signature and opt-out line underneath.</p>
           <div class="row-gap">
             <button id="btn-fu-later" class="secondary">Later</button>
+            <button id="btn-fu-deepl" class="secondary" hidden>Translate with DeepL</button>
             <button id="btn-fu-stop" class="secondary">No more follow-ups</button>
           </div>
           <button id="btn-fu-send" class="primary" style="margin-top:8px">Send follow-up</button>
@@ -220,6 +244,11 @@
         </div>
         <p id="an-rates" class="small"></p>
         <p class="muted small">Opens aren't tracked. That needs a tracking image hosted on a server, and Apple Mail and Gmail often block or fake opens anyway. Replies are the number that matters.</p>
+      </div>
+      <div class="card">
+        <h2>What's working</h2>
+        <p class="muted small">Reply rates for each kind of subject line and opening line. New drafts lean towards the ones getting replies, while still trying the others now and then. An email counts once it has had 3 days to get an answer.</p>
+        <div id="an-styles"></div>
       </div>
       <div class="card">
         <h2>Sent per day</h2>

@@ -112,3 +112,15 @@ body.full #tab-analytics .card:first-child { grid-row: span 2; }
 body.full .lead-list { max-height: 70vh; }
 @media (max-width: 760px) { body.full .cols, body.full #tab-setup.active, body.full #tab-compose.active, body.full #tab-analytics.active { display: block; } }
 .row-gap > label.grow { display: flex; flex-direction: column; justify-content: flex-end; }
+
+/* Phase 2: research, languages, hold-back warning, style results */
+.row-gap.two > div { flex: 1; min-width: 0; }
+.row-gap.two select { width: 100%; }
+.research { background: color-mix(in srgb, var(--accent) 8%, var(--card)); border-left: 3px solid var(--accent); padding: 6px 8px; margin: 8px 0; border-radius: 4px; white-space: pre-line; }
+.warn { background: color-mix(in srgb, #f0b54a 14%, var(--card)); border: 1px solid #c98a1a; padding: 6px 8px; margin: 8px 0; border-radius: 4px; }
+.warn p { margin: 0 0 4px; }
+.cap-research { font-size: 12px; color: var(--accent); margin-top: 2px; }
+table.styles { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+table.styles th, table.styles td { text-align: left; padding: 3px 4px; border-bottom: 1px solid var(--border); }
+table.styles td.n { text-align: right; }
+table.styles tr.best td { font-weight: 600; }

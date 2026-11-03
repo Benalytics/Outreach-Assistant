@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Outreach Assistant",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Capture leads from Maps, Yelp, Trustpilot, Amazon, social profiles and job sites, check their emails, save them to Google Sheets, and send short personal emails and follow-ups from Gmail.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsp7qe7GOOGwfywWM2z/SoxUuRRYLiAsfNxOLM0KoWgKsDXLMXdX83ZLdgZGR97aL7LN1+aDbLgJqIXg6EcX2FIT3Q3KPG/4HrxBAAlCBAF4/7q+w5gAcpOxSrRyr9z78sn80t7bnPQrxfbkvGqq/BhWL+t+jI/yxsRrU52z5cW4/jl/E4Qe01CNwYLCRtAlrg0Gz70jZOiNa9QmM5JAMVvSC2m00wVOEfTfDw+fHnDJVX6mk2qIT1oGkPuabAyu5DgkpdxZRn+6YDE2PYiivxX1Fy9PkfXZeE2PIZXflDhafu/E2LX1YVf4d+GWBfg7ykqzVwRYT1iMIwOANTB+aFQIDAQAB",
   "permissions": [

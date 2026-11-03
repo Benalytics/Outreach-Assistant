@@ -1,4 +1,8 @@
-import { SEGMENTS, BODY_LIMIT, makeDraft, guessSegment, footer, makeFollowUp, FOLLOWUP_LIMIT, textLength } from "./lib/templates.js";
+import { SEGMENTS, BODY_LIMIT, makeDraft, guessSegment, footer, makeFollowUp, FOLLOWUP_LIMIT, textLength, allowedStyles } from "./lib/templates.js";
+import { LANGS, pickLang } from "./lib/i18n.js";
+import { SUBJECT_STYLES, OPENER_STYLES, pickStyle } from "./lib/learn.js";
+import { parseResearch, SIGN_LABELS } from "./lib/research.js";
+import { STRICT } from "./lib/country.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,6 +53,12 @@ function render(state) {
   $("use-hunter-search").checked = state.useHunterSearch !== false;
   if (!state.hasHunterKey) $("hunter-status").textContent = "Checks each mailbox for real, and finds emails when a website lists none. It stays in this browser only.";
   else if (!hunterShown) { hunterShown = true; showHunterCredits(); }
+  deeplOn = !!state.hasDeeplKey;
+  $("btn-d-deepl").hidden = !deeplOn;
+  $("btn-fu-deepl").hidden = !deeplOn;
+  $("deepl-formal").value = state.deeplFormal === false ? "0" : "1";
+  if (!deeplOn) $("deepl-status").textContent = "Translates your drafts into the lead's language with better wording than the built-in versions. A free DeepL API key gives you 500,000 characters a month. It stays in this browser only.";
+  else if (!deeplShown) { deeplShown = true; showDeeplUsage(); }
   $("sheet-connected").hidden = !state.sheet;
   $("sheet-setup").hidden = !!state.sheet;
   if (state.sheet) {
@@ -136,6 +146,24 @@ $("btn-hunter-save").addEventListener("click", (e) => withBusy(e.target, async (
 $("use-hunter").addEventListener("change", (e) => send("setUseHunter", { on: e.target.checked }));
 $("use-hunter-search").addEventListener("change", (e) => send("setUseHunterSearch", { on: e.target.checked }));
 
+// ---------- DeepL key ----------
+let deeplOn = false;
+let deeplShown = false;
+const usageText = (u) => `DeepL key saved. ${u.used.toLocaleString()} of ${u.limit.toLocaleString()} characters used this month.`;
+async function showDeeplUsage() {
+  try { $("deepl-status").textContent = usageText((await send("deeplUsage")).usage); }
+  catch (e) { $("deepl-status").textContent = `DeepL key saved, but: ${e.message}`; }
+}
+$("btn-deepl-save").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const r = await send("saveDeeplKey", { key: $("deepl-key").value });
+  $("deepl-key").value = "";
+  if (r.usage) { $("deepl-status").textContent = usageText(r.usage); toast("DeepL key saved and working"); }
+  else toast("DeepL key removed");
+  deeplShown = !!r.usage;
+  await refresh();
+}));
+$("deepl-formal").addEventListener("change", (e) => send("setDeeplFormal", { on: e.target.value === "1" }));
+
 // ---------- Captured (everything captured, by hand, automatically or from Apollo) ----------
 const clean = (l) => { const { verifyReason, apolloStatus, hunterStatus, picked, offDomain, ...rest } = l; return rest; };
 let caps = [];
@@ -152,12 +180,23 @@ function el(tag, cls, text) {
   return e;
 }
 
+// A short line about what was found on their website.
+function researchLine(r) {
+  if (!r) return "";
+  return [
+    r.titles?.length ? `📚 ${r.titles.join(", ")}` : "",
+    [...(r.genres || []), r.ages].filter(Boolean).join(", "),
+    (r.signs || []).map((k) => SIGN_LABELS[k]).join(", "),
+    r.quote ? `“${r.quote}”` : "",
+  ].filter(Boolean).join(" · ");
+}
+
 let lastSig = "";
 function renderCaptures(force) {
   const list = $("cap-list");
   if (!force && list.contains(document.activeElement) && document.activeElement.tagName === "INPUT" && document.activeElement.type !== "checkbox") return;
   const shown = caps.filter((c) => capFilter === "all" || (capFilter === "working" ? ["new", "checking"].includes(c.status) : c.status === capFilter));
-  const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.leads?.length, c.website]));
+  const sig = capFilter + JSON.stringify(shown.map((c) => [c.id, c.status, c.leads?.length, c.website, !!c.research]));
   if (!force && sig === lastSig) return;
   lastSig = sig;
   const count = (st) => caps.filter((c) => st.includes(c.status)).length;
@@ -174,6 +213,8 @@ function renderCaptures(force) {
     const metaBits = [c.business && c.name ? c.name : "", c.source, c.country, c.handle, c.rating && `★ ${c.rating}${c.reviews ? ` (${c.reviews})` : ""}`, c.website && new URL(c.website).hostname.replace(/^www\./, "")].filter(Boolean);
     li.append(el("div", "cap-meta", metaBits.join(" · ")));
     if (c.note) li.append(el("div", "cap-meta", c.note));
+    const rs = researchLine(c.research);
+    if (rs || (c.lang && c.lang !== "en")) li.append(el("div", "cap-research", [rs, c.lang && c.lang !== "en" ? `Writes in ${LANGS[c.lang]}` : ""].filter(Boolean).join(" · ")));
     if (c.error) li.append(el("div", "cap-meta", c.error));
 
     if (c.status === "ready" && c.leads?.length) {
@@ -420,6 +461,19 @@ let profile = {};
 let ready = [];
 let idx = 0;
 let version = 0;
+let stats = null;   // reply rates per style, from the sheet
+let combos = [];    // style combinations for "New version"
+let draft = null;   // the draft as built, so DeepL can redo it from English
+
+for (const sel of ["d-lang", "fu-lang"]) {
+  for (const [k, v] of Object.entries(LANGS)) {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = v;
+    $(sel).append(o);
+  }
+}
+const leadLang = (lead) => (LANGS[lead.Language] ? lead.Language : pickLang({ country: lead.Country }));
 
 for (const sel of ["d-segment", "fu-segment"]) {
   for (const [k, v] of Object.entries(SEGMENTS)) {
@@ -439,7 +493,8 @@ async function loadProfile() {
   $("pf-samples").value = profile.samples || "";
   $("pf-reviews").value = profile.reviews || "";
   $("profile-card").open = !profile.name || !profile.address;
-  $("d-footer").textContent = footer(profile).trim();
+  if (ready[idx]) showDraft(false);
+  if (fus[fuIdx]) showFollowUp(false);
 }
 
 $("btn-profile-save").addEventListener("click", (e) => withBusy(e.target, async () => {
@@ -449,7 +504,7 @@ $("btn-profile-save").addEventListener("click", (e) => withBusy(e.target, async 
     samples: $("pf-samples").value.trim(), reviews: $("pf-reviews").value.trim(),
   };
   await send("saveProfile", { profile });
-  $("d-footer").textContent = footer(profile).trim();
+  if (ready[idx]) $("d-footer").textContent = footer(profile, ready[idx], $("d-lang").value).trim();
   $("profile-card").open = false;
   toast("Details saved");
 }));
@@ -458,6 +513,7 @@ async function loadReady() {
   try {
     const r = await send("readyLeads");
     ready = r.ready;
+    stats = r.stats;
     idx = 0;
     setFollowUps(r);
     $("ready-info").textContent = ready.length
@@ -476,21 +532,64 @@ function updateCount() {
   $("d-count").className = n > BODY_LIMIT ? "over" : "";
 }
 
+// Picks the subject and opener styles: the first draft leans on what's getting replies,
+// "New version" then walks through the other combinations.
+function styleCombos(lead) {
+  const allowed = allowedStyles(lead);
+  const first = [pickStyle(stats?.subject, allowed.subject), pickStyle(stats?.opener, allowed.opener)];
+  const list = [first];
+  for (const o of allowed.opener) for (const sub of allowed.subject) if (!(sub === first[0] && o === first[1])) list.push([sub, o]);
+  return list;
+}
+
 function showDraft(fresh) {
   const lead = ready[idx];
   $("draft").hidden = !lead;
   if (!lead) return;
-  if (fresh) { version = 0; $("d-segment").value = guessSegment(lead); }
-  const d = makeDraft(lead, $("d-segment").value, version);
+  if (fresh) {
+    version = 0;
+    $("d-segment").value = guessSegment(lead);
+    $("d-lang").value = leadLang(lead);
+    $("d-anyway").checked = false;
+    combos = styleCombos(lead);
+  }
+  if (!combos.length) combos = styleCombos(lead);
+  const [subjectStyle, openerStyle] = combos[version % combos.length];
+  const lang = $("d-lang").value;
+  draft = makeDraft(lead, { segment: $("d-segment").value, lang, subjectStyle, openerStyle });
   $("d-to").textContent = lead.Email;
-  $("d-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}) · ${idx + 1} of ${ready.length}`;
-  $("d-subject").value = d.subject;
-  $("d-body").value = d.body;
+  $("d-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}${lead.Country ? `, ${lead.Country}` : ""}) · ${idx + 1} of ${ready.length}`;
+  $("d-subject").value = draft.subject;
+  $("d-body").value = draft.body;
+  const r = researchLine(parseResearch(lead.Research));
+  $("d-research").hidden = !r;
+  $("d-research").textContent = r ? `From their website: ${r}` : "";
+  const strict = STRICT.has(lead.Country);
+  $("d-strict").hidden = !strict;
+  $("d-strict-text").textContent = strict ? `${lead.Country} has strict rules on cold email to businesses: it's generally only allowed with their prior consent. This lead is held back unless you tick Send anyway.` : "";
+  $("d-footer").textContent = footer(profile, lead, lang).trim();
+  const st = (kind, k) => { const x = stats?.[kind]?.[k]; return x?.sent ? ` (${x.replies}/${x.sent} replied)` : ""; };
+  $("d-styles").textContent = `Subject: ${SUBJECT_STYLES[draft.subjectStyle]}${st("subject", draft.subjectStyle)} · Opener: ${OPENER_STYLES[draft.openerStyle]}${st("opener", draft.openerStyle)}`;
   updateCount();
 }
 
 $("d-body").addEventListener("input", updateCount);
-$("d-segment").addEventListener("change", () => { version = 0; showDraft(false); });
+$("d-segment").addEventListener("change", () => showDraft(false));
+$("d-lang").addEventListener("change", () => showDraft(false));
+$("btn-d-deepl").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const lead = ready[idx];
+  const lang = $("d-lang").value;
+  if (lang === "en") throw new Error("Pick the language to translate into first.");
+  // Starts from the English version of this draft, unless you've edited the text yourself.
+  const edited = $("d-subject").value !== draft.subject || $("d-body").value !== draft.body;
+  const en = edited ? { subject: $("d-subject").value, body: $("d-body").value } : makeDraft(lead, { segment: draft.segment, lang: "en", subjectStyle: draft.subjectStyle, openerStyle: draft.openerStyle });
+  const { texts } = await send("translate", { texts: [en.subject, en.body], lang, country: lead.Country });
+  $("d-subject").value = texts[0];
+  $("d-body").value = texts[1];
+  draft = { ...draft, subject: texts[0], body: texts[1] };
+  updateCount();
+  toast(`Translated into ${LANGS[lang]} with DeepL`);
+}));
 $("btn-d-new").addEventListener("click", () => { version++; showDraft(false); });
 $("btn-ready-load").addEventListener("click", loadReady);
 
@@ -513,7 +612,12 @@ $("btn-d-send").addEventListener("click", (e) => withBusy(e.target, async () => 
   if (!subject) throw new Error("Add a subject.");
   if (body.length > BODY_LIMIT) throw new Error(`Shorten the message to ${BODY_LIMIT} characters or less.`);
   const lead = ready[idx];
-  await send("sendLeadEmail", { row: lead.row, to: lead.Email, subject, text: `${body}\n${footer(profile)}` });
+  if (STRICT.has(lead.Country) && !$("d-anyway").checked) throw new Error(`Held back: ${lead.Country} has strict cold email rules. Tick Send anyway if you're sure, or skip this lead.`);
+  const lang = $("d-lang").value;
+  await send("sendLeadEmail", {
+    row: lead.row, to: lead.Email, subject, text: `${body}\n${footer(profile, lead, lang)}`,
+    subjectStyle: draft.subjectStyle, openerStyle: draft.openerStyle, lang, sendAnyway: $("d-anyway").checked,
+  });
   toast(`Sent to ${lead.Email}`);
   nextLead();
 }));
@@ -532,6 +636,7 @@ async function loadAnalytics() {
     : `Nothing sent yet. ${a.waiting} leads waiting to be emailed.`;
   $("an-last").textContent = a.lastCheck ? `Inbox last checked ${new Date(a.lastCheck).toLocaleString()}. It checks every 10 minutes.` : "Inbox not checked yet.";
 
+  renderStyles(a.stats);
   const days = $("an-days");
   days.replaceChildren();
   const max = Math.max(1, ...a.byDay.map(([, n]) => n));
@@ -565,6 +670,25 @@ async function loadAnalytics() {
   }
 }
 
+function renderStyles(st) {
+  const box = $("an-styles");
+  box.replaceChildren();
+  const any = st && [...Object.values(st.subject), ...Object.values(st.opener)].some((x) => x.sent);
+  if (!any) { box.append(el("p", "muted small", "Nothing to compare yet. Results show here once emails sent with this version have had 3 days.")); return; }
+  for (const [kind, names, title] of [["subject", SUBJECT_STYLES, "Subject line"], ["opener", OPENER_STYLES, "Opening line"]]) {
+    const t = el("table", "styles");
+    t.innerHTML = `<tr><th>${title}</th><th class="n">Sent</th><th class="n">Replies</th><th class="n">Rate</th></tr>`;
+    const rows = Object.entries(st[kind]).map(([k, x]) => [k, x, x.sent ? x.replies / x.sent : -1]);
+    const best = Math.max(...rows.filter(([, x]) => x.sent >= 5).map(([, , r]) => r), 0);
+    for (const [k, x, r] of rows) {
+      const tr = el("tr", best > 0 && r === best && x.sent >= 5 ? "best" : "");
+      tr.append(el("td", "", names[k]), el("td", "n", String(x.sent)), el("td", "n", String(x.replies)), el("td", "n", x.sent ? `${Math.round(r * 100)}%` : "–"));
+      t.append(tr);
+    }
+    box.append(t);
+  }
+}
+
 $("btn-check").addEventListener("click", (e) => withBusy(e.target, async () => {
   const r = await send("checkNow");
   toast(r.checked ? `Checked ${r.checked} conversation${r.checked === 1 ? "" : "s"}, ${r.changes} new update${r.changes === 1 ? "" : "s"}` : "No sent emails to check yet");
@@ -595,13 +719,13 @@ function showFollowUp(fresh) {
   $("fu").hidden = !lead;
   if (!lead) return;
   const step = (Number(lead["Follow-ups Sent"]) || 0) + 1;
-  if (fresh) $("fu-segment").value = guessSegment(lead);
+  if (fresh) { $("fu-segment").value = guessSegment(lead); $("fu-lang").value = leadLang(lead); }
   $("fu-to").textContent = lead.Email;
   $("fu-who").textContent = `(${[lead.Name, lead.Business].filter(Boolean).join(", ") || "no name"}) · ${fuIdx + 1} of ${fus.length}`;
   $("fu-step").textContent = step === 1
     ? `Follow-up 1 of 2: shares your samples. First email sent ${new Date(lead["Sent At"]).toLocaleDateString()}: "${lead.Subject}"`
     : "Follow-up 2 of 2: a polite last email. After this, no more emails to this lead.";
-  $("fu-body").value = makeFollowUp(lead, $("fu-segment").value, step, profile);
+  $("fu-body").value = makeFollowUp(lead, $("fu-segment").value, step, profile, $("fu-lang").value);
   fuCount();
 }
 
@@ -614,6 +738,18 @@ function nextFollowUp() {
 
 $("fu-body").addEventListener("input", fuCount);
 $("fu-segment").addEventListener("change", () => showFollowUp(false));
+$("fu-lang").addEventListener("change", () => showFollowUp(false));
+$("btn-fu-deepl").addEventListener("click", (e) => withBusy(e.target, async () => {
+  const lead = fus[fuIdx];
+  const lang = $("fu-lang").value;
+  if (lang === "en") throw new Error("Pick the language to translate into first.");
+  const step = (Number(lead["Follow-ups Sent"]) || 0) + 1;
+  const en = makeFollowUp(lead, $("fu-segment").value, step, profile, "en");
+  const { texts } = await send("translate", { texts: [en], lang, country: lead.Country });
+  $("fu-body").value = texts[0];
+  fuCount();
+  toast(`Translated into ${LANGS[lang]} with DeepL`);
+}));
 $("btn-fu-load").addEventListener("click", loadReady);
 $("btn-fu-later").addEventListener("click", () => { if (fus.length > 1) { fuIdx = (fuIdx + 1) % fus.length; showFollowUp(true); } else toast("This is the only one due"); });
 $("btn-fu-stop").addEventListener("click", (e) => withBusy(e.target, async () => {
@@ -627,7 +763,7 @@ $("btn-fu-send").addEventListener("click", (e) => withBusy(e.target, async () =>
   if (textLength(body) > FOLLOWUP_LIMIT) throw new Error(`Shorten the follow-up to ${FOLLOWUP_LIMIT} characters or less (links not counted).`);
   const lead = fus[fuIdx];
   if (!(Number(lead["Follow-ups Sent"]) || 0) && !profile.samples && !profile.portfolio) { $("profile-card").open = true; throw new Error("Add a samples link under Your details first."); }
-  const { n } = await send("sendFollowUp", { row: lead.row, text: `${body}\n${footer(profile)}` });
+  const { n } = await send("sendFollowUp", { row: lead.row, text: `${body}\n${footer(profile, lead, $("fu-lang").value)}` });
   toast(`Follow-up ${n} sent to ${lead.Email}`);
   nextFollowUp();
 }));

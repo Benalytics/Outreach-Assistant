@@ -149,3 +149,19 @@ Everything you capture (and every Apollo email you reveal) lands in **Captured**
 - Leads in **Germany or Austria** are marked "held back from sending" (stricter cold email law there). You can still save them.
 
 New columns in the sheet: **Country** and **Rating**.
+
+---
+
+# Phase 2: research, languages and learning from replies (version 0.8)
+
+**Research.** When the tool checks a website for an email, it also reads it: book titles, the kind of books and age group, signs they need help now (looking for an illustrator, a new book on the way, self-published, publishes other authors, makes learning materials, offers free guides), and one short line in their own words. You see this in the Captured list and above each draft, and it's saved in the new **Research** column.
+
+**Languages.** Drafts are written in English, Spanish, French, German, Portuguese, Italian or Dutch. The language comes from their website, or from their country when the website doesn't say. Change it per email with the **Language** menu. The built-in wording is formal.
+
+**DeepL (optional).** In Setup, paste a DeepL API key (the free plan is enough) and pick Formal or Informal. A **Translate with DeepL** button then appears on each draft and follow-up. It translates the English version of the draft, or your own edited text if you changed it. The key stays in this browser only.
+
+**EU and UK rules.** Emails to leads in the EU, the UK, Switzerland and Norway get a line saying where you found their details, above the opt-out line. Leads in **Germany and Austria** are held back: the draft shows a warning, and it only sends if you tick **Send anyway**.
+
+**Learning from replies.** Each email uses one of four subject styles (Question, Curiosity, Benefit, About their book) and one of three openers (something from their website, a common problem, a direct question). The tool records which ones were used and, as replies come in, leans towards the ones that work while still trying the others. See **What's working** in Analytics.
+
+New sheet columns: **Research**, **Language**, **Subject Style**, **Opener Style**. Connect your sheet again (or just load Compose) and the header updates itself.
