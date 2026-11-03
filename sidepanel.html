@@ -87,6 +87,10 @@
             <span class="pill" id="pill-google">To do</span>
           </div>
           <p id="auth-status" class="muted small">Checking…</p>
+          <div id="send-from-box" hidden>
+            <label class="field"><span>Send emails from</span><select id="send-from"></select></label>
+            <p id="send-from-hint" class="hint">To send as another address you own, such as your business email, add it in Gmail first: Settings, See all settings, Accounts and Import, Send mail as. Then <button id="btn-send-from-refresh" class="link small">refresh this list</button>.</p>
+          </div>
           <button id="btn-signin" class="btn btn-primary btn-block">Sign in with Google</button>
           <button id="btn-signout" class="btn btn-ghost btn-sm" hidden>Sign out</button>
         </div>

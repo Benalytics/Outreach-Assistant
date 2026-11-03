@@ -1,6 +1,6 @@
 import { getToken, getUserEmail, signOut } from "./lib/auth.js";
 import { createLeadsSheet, connectSheet, parseSheetId, appendLeads, getLeads, updateLead } from "./lib/sheets.js";
-import { sendEmail, getThread } from "./lib/gmail.js";
+import { sendEmail, getThread, listSendAs } from "./lib/gmail.js";
 import { FOLLOWUP_DAYS } from "./lib/templates.js";
 import { checkInbox, summarize } from "./lib/tracker.js";
 import { searchPeople, revealEmails } from "./lib/apollo.js";
@@ -49,11 +49,30 @@ async function targetTab() {
   return tabs[0] || null;
 }
 
+// The address emails go out as: the one picked under "Send emails from", or the Gmail address.
+async function sender() {
+  const { userEmail, sendFrom, sendAsList, profile } = await chrome.storage.local.get(["userEmail", "sendFrom", "sendAsList", "profile"]);
+  if (!sendFrom) return { from: userEmail }; // Gmail fills in your own address and name
+  let a = (sendAsList || []).find((x) => x.email === sendFrom);
+  if (!a) a = (await refreshSendAs().catch(() => [])).find((x) => x.email === sendFrom);
+  if (!a) throw new Error(`${sendFrom} isn't one of the addresses this Gmail account can send as any more. Pick another under Send emails from in Step 1.`);
+  return { from: a.email, fromName: a.name || (profile?.name || "").split(",")[0].trim(), asAlias: true };
+}
+const myAddresses = async () => {
+  const { userEmail, sendAsList } = await chrome.storage.local.get(["userEmail", "sendAsList"]);
+  return [userEmail, ...(sendAsList || []).map((a) => a.email)].filter(Boolean);
+};
+async function refreshSendAs() {
+  const list = await listSendAs();
+  await chrome.storage.local.set({ sendAsList: list });
+  return list;
+}
+
 // Every 10 minutes: look for replies and bounces, update the sheet, and notify you.
 async function runInboxCheck() {
   const { sheet, userEmail } = await chrome.storage.local.get(["sheet", "userEmail"]);
   if (!sheet || !userEmail) return { changes: [], checked: 0 };
-  const result = await checkInbox(sheet.id, userEmail);
+  const result = await checkInbox(sheet.id, await myAddresses());
   for (const c of result.changes) {
     const who = c.lead.Name || c.lead.Business || c.lead.Email;
     const title = c.type === "Replied" ? `${who} replied` : c.type === "Declined" ? `${who} said no thanks` : `Email to ${c.lead.Email} bounced`;
@@ -106,21 +125,38 @@ const handlers = {
     const { userEmail, sheet } = await chrome.storage.local.get(["userEmail", "sheet"]);
     let signedIn = false;
     try { await getToken(false); signedIn = true; } catch (_) {}
-    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true, deeplKey, deeplFormal = true, useLookup = true, useJobCheck = true, profile, unread = 0 } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch", "deeplKey", "deeplFormal", "useLookup", "useJobCheck", "profile", "unread"]);
+    const { apolloKey, hunterKey: hk, useHunter = true, useHunterSearch = true, deeplKey, deeplFormal = true, useLookup = true, useJobCheck = true, profile, unread = 0, sendFrom } = await chrome.storage.local.get(["apolloKey", "hunterKey", "useHunter", "useHunterSearch", "deeplKey", "deeplFormal", "useLookup", "useJobCheck", "profile", "unread", "sendFrom"]);
     return {
       signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch,
       hasDeeplKey: !!deeplKey, deeplFormal, useLookup, useJobCheck, searchesLeft: await searchesLeft(), dailySearches: DAILY_SEARCHES,
-      hasProfile: !!(profile?.name && profile?.address), unread,
+      hasProfile: !!(profile?.name && profile?.address), unread, sendFrom: sendFrom || "",
     };
   },
   async signIn() {
     const token = await getToken(true);
     const userEmail = await getUserEmail(token);
     await chrome.storage.local.set({ userEmail });
+    try { await refreshSendAs(); } catch (_) { /* shown in Step 1 */ }
     return { userEmail };
   },
   async signOut() {
     await signOut();
+    await chrome.storage.local.remove(["sendFrom", "sendAsList"]);
+    return {};
+  },
+  // ---------- which address emails go out as ----------
+  async sendAs() {
+    const list = await refreshSendAs();
+    const { sendFrom, userEmail } = await chrome.storage.local.get(["sendFrom", "userEmail"]);
+    return { list, sendFrom: sendFrom || "", userEmail };
+  },
+  async setSendFrom({ email }) {
+    const e = (email || "").toLowerCase();
+    const { userEmail } = await chrome.storage.local.get("userEmail");
+    const list = await refreshSendAs();
+    if (e && !list.some((a) => a.email === e)) throw new Error(`${email} isn't set up in Gmail as a Send mail as address yet.`);
+    if (!e || e === (userEmail || "").toLowerCase()) await chrome.storage.local.remove("sendFrom");
+    else await chrome.storage.local.set({ sendFrom: e });
     return {};
   },
   async createSheet({ title }) {
@@ -254,7 +290,7 @@ const handlers = {
     if (STRICT.has(lead.Country) && !sendAnyway) {
       throw new Error(`${lead.Country} has strict rules on cold email to businesses. Tick "Send anyway" if you're sure it's allowed for this lead.`);
     }
-    const { threadId } = await sendEmail({ to, subject, text, from: userEmail });
+    const { threadId } = await sendEmail({ to, subject, text, ...(await sender()) });
     await updateLead(sheet.id, row, {
       "Email Status": "Sent", "Sent At": new Date().toISOString(), Subject: subject, "Gmail Thread ID": threadId,
       "Subject Style": subjectStyle, "Opener Style": openerStyle, "Main Point": mainPoint, ...(lang ? { Language: lang } : {}),
@@ -274,8 +310,8 @@ const handlers = {
     // Check the conversation again right before sending: never follow up on someone who answered.
     const thread = await getThread(lead["Gmail Thread ID"]);
     const hdr = (m, n) => (m.payload?.headers || []).find((h) => h.name.toLowerCase() === n.toLowerCase())?.value || "";
-    const me = (userEmail || "").toLowerCase();
-    const theirs = (thread.messages || []).filter((m) => !hdr(m, "From").toLowerCase().includes(me));
+    const mine = (await myAddresses()).map((e) => e.toLowerCase());
+    const theirs = (thread.messages || []).filter((m) => !mine.some((e) => hdr(m, "From").toLowerCase().includes(e)));
     if (theirs.length) {
       await runInboxCheck().catch(() => {});
       throw new Error(`${lead.Name || lead.Email} has already answered. Check Analytics or Gmail. No follow-up sent.`);
@@ -285,7 +321,7 @@ const handlers = {
     const subj = hdr(original, "Subject") || lead.Subject || "";
     const n = (Number(lead["Follow-ups Sent"]) || 0) + 1;
     await sendEmail({
-      to: lead.Email, subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`, text, from: userEmail,
+      to: lead.Email, subject: /^re:/i.test(subj) ? subj : `Re: ${subj}`, text, ...(await sender()),
       threadId: lead["Gmail Thread ID"], inReplyTo: hdr(last, "Message-ID") || undefined,
     });
     await updateLead(sheet.id, row, { "Follow-ups Sent": String(n), "Last Follow-up At": new Date().toISOString() });

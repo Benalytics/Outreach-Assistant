@@ -122,6 +122,8 @@ function render(state) {
   $("lookup-status").textContent = `${state.searchesLeft} of ${state.dailySearches} look-ups left today. Each lead uses up to two. They reset every day.`;
   $("auth-status").textContent = state.signedIn ? `Signed in as ${state.userEmail || "your Google account"}` : "Not signed in yet. A Google window opens and asks you to allow access.";
   $("btn-signin").hidden = state.signedIn;
+  $("send-from-box").hidden = !state.signedIn;
+  if (state.signedIn && !sendAsLoaded) loadSendAs();
   $("btn-signout").hidden = !state.signedIn;
   $("sheet-card").style.opacity = state.signedIn ? 1 : 0.5;
   $("sheet-card").querySelectorAll("button, input").forEach((el) => { el.disabled = !state.signedIn; });
@@ -157,8 +159,41 @@ $("btn-signin").addEventListener("click", (e) => withBusy(e.currentTarget, async
 
 $("btn-signout").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("signOut");
+  sendAsLoaded = false;
   await refresh();
 }));
+
+// ---------- which address emails go out as ----------
+let sendAsLoaded = false;
+async function loadSendAs() {
+  sendAsLoaded = true;
+  const sel = $("send-from");
+  try {
+    const { list, sendFrom, userEmail } = await send("sendAs");
+    sel.replaceChildren();
+    const all = list.length ? list : [{ email: userEmail, name: "", primary: true }];
+    for (const a of all) {
+      const o = document.createElement("option");
+      o.value = a.primary ? "" : a.email;
+      o.textContent = `${a.email}${a.name ? ` (${a.name})` : ""}${a.primary ? " · your Gmail" : ""}`;
+      sel.append(o);
+    }
+    sel.value = sendFrom && all.some((a) => a.email === sendFrom) ? sendFrom : "";
+    $("send-from-hint").firstChild.textContent = all.length > 1
+      ? "These are the addresses Gmail lets this account send as. Replies go to the address you pick. To add another, use Gmail's Settings, See all settings, Accounts and Import, Send mail as, then "
+      : "To send as another address you own, such as your business email, add it in Gmail first: Settings, See all settings, Accounts and Import, Send mail as. Then ";
+  } catch (e) {
+    sel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: st.userEmail || "Your Gmail address" }));
+    $("send-from-hint").firstChild.textContent = `${e.message} `;
+  }
+}
+$("send-from").addEventListener("change", async (e) => {
+  try {
+    await send("setSendFrom", { email: e.target.value });
+    toast(`Emails will go out from ${e.target.value || st.userEmail}`);
+  } catch (err) { toast(err.message, "err"); loadSendAs(); }
+});
+$("btn-send-from-refresh").addEventListener("click", (e) => withBusy(e.currentTarget, async () => { await loadSendAs(); toast("List updated"); }));
 
 $("btn-sheet-create").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { sheet } = await send("createSheet", { title: "Outreach Leads" });
