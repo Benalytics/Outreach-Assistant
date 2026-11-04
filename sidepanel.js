@@ -9,12 +9,28 @@ import { scoreLead } from "./lib/score.js";
 
 const $ = (id) => document.getElementById(id);
 
+// Turns Chrome's and Google's wording into something you can act on.
+function plainError(msg) {
+  const m = msg || "";
+  if (/Receiving end does not exist|message port closed|Could not establish connection|Extension context invalidated/i.test(m)) {
+    return "The extension's background part isn't answering. Open chrome://extensions, click the reload arrow on Outreach Assistant, then close and reopen this panel.";
+  }
+  if (/bad client id|invalid_client|OAuth2 client/i.test(m)) return `Google didn't accept the client ID (${m}). Check the client ID in manifest.json matches your Google Cloud Chrome extension client.`;
+  if (/OAuth2 not granted|not signed in|user is not signed in|OAuth2 request failed/i.test(m)) return "You're not signed in to Google yet. Do that first in Step 1, under Your Google account.";
+  return m || "Something went wrong";
+}
+
+const SEND_LIMIT_MS = 5 * 60 * 1000;
 function send(type, payload) {
   return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage({ type, payload }, (res) => {
-      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
-      res?.ok ? resolve(res.data) : reject(new Error(res?.error || "Something went wrong"));
-    });
+    const timer = setTimeout(() => reject(new Error("No answer after 5 minutes. If a Google window opened, finish or close it. Otherwise reload the extension at chrome://extensions and try again.")), SEND_LIMIT_MS);
+    try {
+      chrome.runtime.sendMessage({ type, payload }, (res) => {
+        clearTimeout(timer);
+        if (chrome.runtime.lastError) return reject(new Error(plainError(chrome.runtime.lastError.message)));
+        res?.ok ? resolve(res.data) : reject(new Error(plainError(res?.error)));
+      });
+    } catch (e) { clearTimeout(timer); reject(new Error(plainError(e.message))); }
   });
 }
 
@@ -32,10 +48,22 @@ function toast(text, kind = "ok") {
 }
 $("toast").addEventListener("click", () => { $("toast").hidden = true; });
 
-async function withBusy(button, fn) {
+// Shows a spinner on the button while it works, and a note if it takes a while, so a
+// click never looks like it did nothing.
+async function withBusy(button, fn, slowNote = "Still working on it…") {
+  if (button.classList.contains("busy")) return toast("Already working on that. One moment…");
   button.disabled = true;
-  try { await fn(); } catch (e) { toast(e.message, "err"); } finally { button.disabled = false; }
+  button.classList.add("busy");
+  button.setAttribute("aria-busy", "true");
+  const slow = setTimeout(() => toast(slowNote), 12000);
+  try { await fn(); } catch (e) { toast(e.message, "err"); } finally {
+    clearTimeout(slow);
+    button.disabled = false;
+    button.classList.remove("busy");
+    button.removeAttribute("aria-busy");
+  }
 }
+const GOOGLE_WAIT = "Waiting for Google. If a sign-in window opened, it may be behind this one or on another screen.";
 
 // ---------- steps (tabs) and the "Next step" guide ----------
 const currentTab = () => document.querySelector(".tab.active")?.dataset.tab;
@@ -69,6 +97,7 @@ let guideTarget = null;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 function nextStep() {
   if (!st.signedIn) return ["Sign in with Google, so the tool can save your leads and send email from your Gmail.", "setup", "card-google"];
+  if (noGmail) return [`${st.userEmail || "This account"} has no Gmail inbox, so it can't send. Sign in with your Gmail account instead.`, "setup", "other-account"];
   if (!st.sheet) return ["Create your leads sheet. It takes one click.", "setup", "sheet-card"];
   if (!st.hasProfile) return ["Add your name and mailing address. They go under every email.", "setup", "profile-card"];
   const readyCaps = caps.filter((c) => c.status === "ready").length;
@@ -104,14 +133,14 @@ function pill(id, on, onText, offText, optional) {
 }
 function render(state) {
   st = state;
-  pill("pill-google", state.signedIn, "Done", "To do");
+  pill("pill-google", state.signedIn && !noGmail, "Done", state.signedIn ? "Needs Gmail" : "To do");
   pill("pill-sheet", !!state.sheet, "Done", "To do");
   pill("pill-profile", state.hasProfile, "Done", "To do");
   pill("pill-hunter", state.hasHunterKey, "On", "Off", true);
   pill("pill-apollo", state.hasApolloKey, "On", "Off", true);
   pill("pill-deepl", state.hasDeeplKey, "On", "Off", true);
   pill("pill-lookup", state.useLookup !== false || state.useJobCheck !== false, "On", "Off", true);
-  const done = [state.signedIn, !!state.sheet, state.hasProfile].filter(Boolean).length;
+  const done = [state.signedIn && !noGmail, !!state.sheet, state.hasProfile].filter(Boolean).length;
   $("setup-bar").style.width = `${(done / 3) * 100}%`;
   $("setup-progress").textContent = done === 3 ? "All set. Head to Find leads whenever you're ready." : `${done} of 3 done`;
   document.querySelector('.tab[data-tab="setup"]').classList.toggle("done", done === 3);
@@ -120,13 +149,20 @@ function render(state) {
   $("use-lookup").checked = state.useLookup !== false;
   $("use-job-check").checked = state.useJobCheck !== false;
   $("lookup-status").textContent = `${state.searchesLeft} of ${state.dailySearches} look-ups left today. Each lead uses up to two. They reset every day.`;
-  $("auth-status").textContent = state.signedIn ? `Signed in as ${state.userEmail || "your Google account"}` : "Not signed in yet. A Google window opens and asks you to allow access.";
+  $("auth-status").textContent = state.signedIn
+    ? `Signed in as ${state.userEmail || "your Google account"}${state.picked ? " (the account you picked)" : " (the account Chrome uses)"}.`
+    : state.picked ? "Your Google sign-in has run out. Sign in again." : "Not signed in yet. A Google window opens and asks you to allow access. It uses the account Chrome is signed in with.";
   $("btn-signin").hidden = state.signedIn;
   $("send-from-box").hidden = !state.signedIn;
+  if (!state.signedIn) { noGmail = false; sendAsLoaded = false; }
   if (state.signedIn && !sendAsLoaded) loadSendAs();
+  $("no-gmail").hidden = !(state.signedIn && noGmail);
   $("btn-signout").hidden = !state.signedIn;
+  $("btn-use-chrome").hidden = !state.picked;
+  $("redirect-url").textContent = state.redirectUrl || "";
+  if (state.webClientId && !$("web-client-id").value) $("web-client-id").value = state.webClientId;
+  $("btn-choose-account").lastChild.textContent = state.picked ? "Pick a different account" : "Choose a Google account";
   $("sheet-card").style.opacity = state.signedIn ? 1 : 0.5;
-  $("sheet-card").querySelectorAll("button, input").forEach((el) => { el.disabled = !state.signedIn; });
   $("apollo-status").textContent = state.hasApolloKey ? "Apollo key saved. Use it under Find leads, then Apollo." : "Paste your Apollo API key. It stays in this browser only.";
   $("use-hunter").checked = state.useHunter !== false;
   $("use-hunter-search").checked = state.useHunterSearch !== false;
@@ -140,6 +176,8 @@ function render(state) {
   else if (!deeplShown) { deeplShown = true; showDeeplUsage(); }
   $("sheet-connected").hidden = !state.sheet;
   $("sheet-setup").hidden = !!state.sheet;
+  $("sheet-blocked").hidden = !(state.sheet && state.sheetBlocked && state.signedIn);
+  $("sheet-blocked-who").textContent = state.userEmail || "this account";
   if (state.sheet) {
     $("sheet-link").textContent = state.sheet.title;
     $("sheet-link").href = state.sheet.url;
@@ -153,9 +191,10 @@ async function refresh() {
 
 $("btn-signin").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { userEmail } = await send("signIn");
+  sendAsLoaded = false;
   toast(`Signed in as ${userEmail}`);
   await refresh();
-}));
+}, GOOGLE_WAIT));
 
 $("btn-signout").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   await send("signOut");
@@ -163,13 +202,36 @@ $("btn-signout").addEventListener("click", (e) => withBusy(e.currentTarget, asyn
   await refresh();
 }));
 
+// ---------- signing in with an account other than Chrome's ----------
+$("btn-choose-account").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  const clientId = $("web-client-id").value.trim();
+  if (!clientId) { $("web-client-id").focus(); throw new Error("Paste the Web client ID first (steps above)."); }
+  const { userEmail } = await send("chooseAccount", { clientId });
+  sendAsLoaded = false;
+  $("other-account").open = false;
+  toast(`Signed in as ${userEmail}`);
+  await refresh();
+}, GOOGLE_WAIT));
+$("btn-use-chrome").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  const { userEmail } = await send("useChromeAccount");
+  sendAsLoaded = false;
+  toast(`Back on Chrome's account, ${userEmail}`);
+  await refresh();
+}, GOOGLE_WAIT));
+$("btn-copy-redirect").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("redirect-url").textContent); toast("Copied. Paste it under Authorized redirect URIs."); }
+  catch (_) { getSelection().selectAllChildren($("redirect-url")); toast("Press Ctrl+C (or Cmd+C) to copy it.", "err"); }
+});
+
 // ---------- which address emails go out as ----------
 let sendAsLoaded = false;
+let noGmail = false; // the signed-in account has no Gmail inbox
 async function loadSendAs() {
   sendAsLoaded = true;
   const sel = $("send-from");
   try {
     const { list, sendFrom, userEmail } = await send("sendAs");
+    if (noGmail) { noGmail = false; render(st); }
     sel.replaceChildren();
     const all = list.length ? list : [{ email: userEmail, name: "", primary: true }];
     for (const a of all) {
@@ -184,7 +246,14 @@ async function loadSendAs() {
       : "To send as another address you own, such as your business email, add it in Gmail first: Settings, See all settings, Accounts and Import, Send mail as. Then ";
   } catch (e) {
     sel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: st.userEmail || "Your Gmail address" }));
-    $("send-from-hint").firstChild.textContent = `${e.message} `;
+    const none = /no Gmail inbox/i.test(e.message);
+    $("send-from-hint").firstChild.textContent = none ? "Once you're signed in with your Gmail account, your Send mail as addresses show here. " : `${e.message} `;
+    if (none !== noGmail) {
+      noGmail = none;
+      $("no-gmail-who").textContent = st.userEmail || "This account";
+      render(st);
+      if (none) $("other-account").open = true;
+    }
   }
 }
 $("send-from").addEventListener("change", async (e) => {
@@ -195,6 +264,11 @@ $("send-from").addEventListener("change", async (e) => {
 });
 $("btn-send-from-refresh").addEventListener("click", (e) => withBusy(e.currentTarget, async () => { await loadSendAs(); toast("List updated"); }));
 
+$("btn-sheet-recheck").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
+  const { ok } = await send("checkSheet");
+  toast(ok ? "The sheet opens fine now" : "Still can't open it. Check it's shared with this address as an Editor.", ok ? "ok" : "err");
+  await refresh();
+}));
 $("btn-sheet-create").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const { sheet } = await send("createSheet", { title: "Outreach Leads" });
   toast(`Created "${sheet.title}"`);
@@ -328,7 +402,6 @@ function tickedCount() {
 function updateSaveButton() {
   const n = tickedCount();
   $("btn-cap-save").lastChild.textContent = n ? `Save ${n} ticked to my sheet` : "Save ticked to my sheet";
-  $("btn-cap-save").disabled = !n;
 }
 
 let lastSig = "";
@@ -483,7 +556,7 @@ $("cap-filters").addEventListener("click", (e) => {
 $("btn-cap-save").addEventListener("click", (e) => withBusy(e.currentTarget, async () => {
   const chosen = [];
   for (const c of caps) if (c.status === "ready") for (const l of c.leads) if (isPicked(c, l)) chosen.push({ id: c.id, email: l.Email });
-  if (!chosen.length) throw new Error("Nothing ticked to save yet.");
+  if (!chosen.length) throw new Error(caps.some((c) => c.status === "ready") ? "Tick the box next to each lead you want to save first." : "There's nothing ready to save yet. Leads show a green Ready label once their email is checked.");
   const { added, skipped } = await send("saveCaptured", { picks: chosen });
   toast(`Saved ${added} lead${added === 1 ? "" : "s"} to your sheet${skipped ? `, ${skipped} already there` : ""}. Next: Write & send.`);
   await loadCaptures(true);
@@ -1109,3 +1182,4 @@ $("btn-fu-send").addEventListener("click", (e) => withBusy(e.currentTarget, asyn
   const t = new URLSearchParams(location.search).get("tab");
   if (t) showTab(t);
 })();
+window.__panelReady = true; // every button is wired up (boot.js checks this)

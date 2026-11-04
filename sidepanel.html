@@ -87,12 +87,34 @@
             <span class="pill" id="pill-google">To do</span>
           </div>
           <p id="auth-status" class="muted small">Checking…</p>
+          <div id="no-gmail" class="callout warn" hidden>
+            <svg class="i"><use href="#i-alert"/></svg>
+            <div class="grow">
+              <p><strong>This account can't send email.</strong></p>
+              <p class="small"><span id="no-gmail-who">This account</span> has no Gmail inbox, so Gmail won't send from it. Open <b>Use a different Google account</b> below and pick your Gmail account. Then choose your business address under Send emails from.</p>
+            </div>
+          </div>
           <div id="send-from-box" hidden>
             <label class="field"><span>Send emails from</span><select id="send-from"></select></label>
             <p id="send-from-hint" class="hint">To send as another address you own, such as your business email, add it in Gmail first: Settings, See all settings, Accounts and Import, Send mail as. Then <button id="btn-send-from-refresh" class="link small">refresh this list</button>.</p>
           </div>
           <button id="btn-signin" class="btn btn-primary btn-block">Sign in with Google</button>
           <button id="btn-signout" class="btn btn-ghost btn-sm" hidden>Sign out</button>
+          <details id="other-account" class="more">
+            <summary>Use a different Google account</summary>
+            <p class="small">Chrome only lets extensions use the account Chrome itself is signed in with. To use another account you're signed in to, such as your Gmail, give the extension a second key from Google Cloud. You do this once.</p>
+            <ol class="help-steps small">
+              <li>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">Google Cloud, Credentials</a> in the same project as your first client ID.</li>
+              <li>Click <b>Create credentials</b>, then <b>OAuth client ID</b>. For Application type pick <b>Web application</b>.</li>
+              <li>Under <b>Authorized redirect URIs</b>, click <b>Add URI</b> and paste this address: <code id="redirect-url" class="copyable"></code> <button id="btn-copy-redirect" class="link small">Copy</button></li>
+              <li>Click <b>Create</b>, then copy the <b>Client ID</b> and paste it below.</li>
+              <li>On the <b>OAuth consent screen</b> (called Audience in newer menus), make sure the Gmail address you'll pick is listed under <b>Test users</b>.</li>
+            </ol>
+            <label class="field"><span>Web client ID</span><input id="web-client-id" type="text" placeholder="Ends in .apps.googleusercontent.com" autocomplete="off" spellcheck="false"></label>
+            <button id="btn-choose-account" class="btn btn-primary btn-block">Choose a Google account</button>
+            <p class="hint">A Google window opens with your accounts. Pick the one with the Gmail inbox and allow access.</p>
+            <button id="btn-use-chrome" class="btn btn-ghost btn-sm" hidden>Go back to Chrome's account</button>
+          </details>
         </div>
 
         <div class="card" id="sheet-card">
@@ -103,6 +125,11 @@
           </div>
           <div id="sheet-connected" hidden>
             <p class="small">Saving leads to <a id="sheet-link" target="_blank" rel="noopener"></a></p>
+            <div id="sheet-blocked" class="callout warn" hidden>
+              <svg class="i"><use href="#i-alert"/></svg>
+              <div class="grow small">This sheet belongs to your other Google account, so <span id="sheet-blocked-who">this account</span> can't open it. Open the sheet while signed in as the other account, click <b>Share</b> and add this address as an <b>Editor</b>. Or click Use a different sheet and make a new one.
+                <div><button id="btn-sheet-recheck" class="link small">I've shared it, check again</button></div></div>
+            </div>
             <button id="btn-sheet-disconnect" class="btn btn-ghost btn-sm">Use a different sheet</button>
           </div>
           <div id="sheet-setup">
@@ -527,6 +554,12 @@
     </dl>
   </dialog>
 
+  <div id="boot-fail" class="boot-fail" hidden>
+    <strong>The panel didn't load properly.</strong>
+    <p>Buttons won't work until it does. Open <b>chrome://extensions</b>, find Outreach Assistant and click its reload arrow, then close and reopen this panel. If you copied in new files, make sure you replaced the whole folder.</p>
+    <p class="boot-detail" id="boot-detail"></p>
+  </div>
+  <script src="boot.js"></script>
   <script type="module" src="sidepanel.js"></script>
 </body>
 </html>

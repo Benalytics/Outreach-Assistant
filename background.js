@@ -1,4 +1,4 @@
-import { getToken, getUserEmail, signOut } from "./lib/auth.js";
+import { getToken, getUserEmail, signOut, chooseAccount, useChromeAccount, authInfo, googleFetch } from "./lib/auth.js";
 import { createLeadsSheet, connectSheet, parseSheetId, appendLeads, getLeads, updateLead } from "./lib/sheets.js";
 import { sendEmail, getThread, listSendAs } from "./lib/gmail.js";
 import { FOLLOWUP_DAYS } from "./lib/templates.js";
@@ -62,6 +62,29 @@ const myAddresses = async () => {
   const { userEmail, sendAsList } = await chrome.storage.local.get(["userEmail", "sendAsList"]);
   return [userEmail, ...(sendAsList || []).map((a) => a.email)].filter(Boolean);
 };
+// After signing in: remember the address, and forget a "Send emails from" pick that belonged
+// to a different account.
+async function accountChanged(userEmail) {
+  const { userEmail: before } = await chrome.storage.local.get("userEmail");
+  await chrome.storage.local.set({ userEmail });
+  if (before && before !== userEmail) await chrome.storage.local.remove(["sendFrom", "sendAsList"]);
+  try { await refreshSendAs(); } catch (_) { /* shown in Step 1 */ }
+  await checkSheetAccess();
+}
+// A sheet made under another account can't be opened by this one until it's shared.
+async function checkSheetAccess() {
+  const { sheet } = await chrome.storage.local.get("sheet");
+  if (!sheet) return true;
+  try {
+    await googleFetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheet.id}?fields=properties.title`);
+    await chrome.storage.local.remove("sheetBlocked");
+    return true;
+  } catch (e) {
+    if (!/error 40[34]/.test(e.message)) throw e;
+    await chrome.storage.local.set({ sheetBlocked: true });
+    return false;
+  }
+}
 async function refreshSendAs() {
   const list = await listSendAs();
   await chrome.storage.local.set({ sendAsList: list });
@@ -130,13 +153,25 @@ const handlers = {
       signedIn, userEmail: signedIn ? userEmail : null, sheet: sheet || null, hasApolloKey: !!apolloKey, hasHunterKey: !!hk, useHunter, useHunterSearch,
       hasDeeplKey: !!deeplKey, deeplFormal, useLookup, useJobCheck, searchesLeft: await searchesLeft(), dailySearches: DAILY_SEARCHES,
       hasProfile: !!(profile?.name && profile?.address), unread, sendFrom: sendFrom || "",
+      ...(await authInfo()), sheetBlocked: !!(await chrome.storage.local.get("sheetBlocked")).sheetBlocked,
     };
   },
   async signIn() {
     const token = await getToken(true);
     const userEmail = await getUserEmail(token);
-    await chrome.storage.local.set({ userEmail });
-    try { await refreshSendAs(); } catch (_) { /* shown in Step 1 */ }
+    await accountChanged(userEmail);
+    return { userEmail };
+  },
+  // Signs in with any Google account you pick, not only the one Chrome uses.
+  async chooseAccount({ clientId }) {
+    const userEmail = await chooseAccount(clientId);
+    await accountChanged(userEmail);
+    return { userEmail };
+  },
+  async useChromeAccount() {
+    await useChromeAccount();
+    const userEmail = await getUserEmail(await getToken(true));
+    await accountChanged(userEmail);
     return { userEmail };
   },
   async signOut() {
@@ -162,6 +197,7 @@ const handlers = {
   async createSheet({ title }) {
     const sheet = await createLeadsSheet(title || "Outreach Leads");
     await chrome.storage.local.set({ sheet });
+    await chrome.storage.local.remove("sheetBlocked");
     return { sheet };
   },
   async connectSheet({ input }) {
@@ -169,10 +205,14 @@ const handlers = {
     if (!id) throw new Error("That doesn't look like a Google Sheet link.");
     const sheet = await connectSheet(id);
     await chrome.storage.local.set({ sheet });
+    await chrome.storage.local.remove("sheetBlocked");
     return { sheet };
   },
+  async checkSheet() {
+    return { ok: await checkSheetAccess() };
+  },
   async disconnectSheet() {
-    await chrome.storage.local.remove("sheet");
+    await chrome.storage.local.remove(["sheet", "sheetBlocked"]);
     return {};
   },
   async addLeads({ leads }) {

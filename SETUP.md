@@ -196,3 +196,15 @@ New sheet columns: **Research**, **Language**, **Subject Style**, **Opener Style
 **Apollo.** The first box is now a free text **Keyword** box: type anything. The old choices are one-click suggestions under it (Self-published authors, Publishers, Educators, Coaches), which fill in the keyword and job titles for you. The separate Keywords box was merged into it.
 
 **Send emails from another address (0.10.1).** In Step 1, once you're signed in, **Send emails from** lists every address your Gmail account may send as. To send as a business address, add it in Gmail first (Settings, See all settings, Accounts and Import, Send mail as), then click **refresh this list** and pick it. Emails and follow-ups then go out from that address, and replies sent to it are still recognised, as long as its mail also arrives in this Gmail inbox (Gmail's **Check mail from other accounts**, or forwarding from your email host).
+
+**Sign in with a Google account other than Chrome's (0.10.2).** Chrome only gives extensions the account Chrome itself is signed in with. If that account has no Gmail inbox (a Google account made with a business address), Step 1 says **Needs Gmail** and sending fails. To use your Gmail account instead, once:
+
+1. In Google Cloud, open **APIs & Services, Credentials** in the same project as your first client ID.
+2. Click **Create credentials, OAuth client ID**, and pick **Web application**.
+3. Under **Authorized redirect URIs**, add the address shown in Step 1 under **Use a different Google account** (it looks like `https://<extension id>.chromiumapp.org/`). Click **Create** and copy the **Client ID**.
+4. On the **OAuth consent screen** (Audience), make sure your Gmail address is a **Test user**.
+5. In Step 1, open **Use a different Google account**, paste the Client ID and click **Choose a Google account**. Pick your Gmail account and allow access.
+
+Then pick your business address under **Send emails from**. If your leads sheet was made under the other account, share it with your Gmail address as an Editor (or make a new sheet). **Go back to Chrome's account** undoes the switch.
+
+Buttons now show a spinner while they work and say so if something takes a while. If the panel ever fails to load, it says so and tells you to reload the extension, instead of buttons doing nothing.
